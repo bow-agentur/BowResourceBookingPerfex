@@ -1,0 +1,689 @@
+/**
+ * Planning Board - Float-like Resource Timeline
+ * CSS for the resource planning board UI
+ * 
+ * @since 2.0.0
+ */
+
+/* ============================================
+   BOARD CONTAINER & LAYOUT
+   ============================================ */
+
+.rb-board-container {
+    position: relative;
+    overflow: hidden;
+    padding: 0 !important;
+}
+
+.rb-date-header {
+    display: flex;
+    background: #f8f9fa;
+    border-bottom: 2px solid #e0e0e0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.rb-staff-column-header,
+.rb-staff-column {
+    min-width: 200px;
+    max-width: 200px;
+    padding: 10px 15px;
+    background: #fff;
+    border-right: 1px solid #e0e0e0;
+    position: sticky;
+    left: 0;
+    z-index: 50;
+}
+
+.rb-staff-column-header {
+    font-weight: 600;
+    background: #f8f9fa;
+    z-index: 101;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* Legend Info Icon */
+.rb-legend-info {
+    color: #888;
+    cursor: help;
+    font-size: 14px;
+}
+
+.rb-legend-info:hover {
+    color: #3498db;
+}
+
+/* Tooltip Styles for Legend */
+.rb-legend-tooltip {
+    text-align: left;
+    font-size: 12px;
+    line-height: 1.8;
+}
+
+.rb-legend-tooltip .dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.rb-legend-tooltip .dot-grey { background-color: #bdc3c7; }
+.rb-legend-tooltip .dot-green { background-color: #27ae60; }
+.rb-legend-tooltip .dot-orange { background-color: #f39c12; }
+.rb-legend-tooltip .dot-darkorange { background-color: #e67e22; }
+.rb-legend-tooltip .dot-red { background-color: #e74c3c; }
+
+.rb-dates-scroll {
+    display: flex;
+    overflow-x: hidden;
+    flex: 1;
+}
+
+.rb-board-body {
+    max-height: calc(100vh - 350px);
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+/* ============================================
+   DATE CELLS & HEADERS
+   ============================================ */
+
+.rb-date-cell {
+    min-width: 40px;
+    text-align: center;
+    padding: 8px 4px;
+    font-size: 11px;
+    border-right: 1px solid #f0f0f0;
+    flex-shrink: 0;
+}
+
+.rb-date-cell.weekend {
+    background: #f9f9f9;
+}
+
+.rb-date-cell.today {
+    background: #e3f2fd;
+    font-weight: 600;
+}
+
+.rb-date-cell .rb-day-name {
+    display: block;
+    font-size: 10px;
+    color: #888;
+    text-transform: uppercase;
+}
+
+.rb-date-cell .rb-day-num {
+    display: block;
+    font-weight: 500;
+}
+
+.rb-date-cell.weekend .rb-day-num {
+    color: #aaa;
+}
+
+/* Month headers for month view */
+.rb-month-header {
+    padding: 5px 10px;
+    background: #e9ecef;
+    font-weight: 600;
+    font-size: 12px;
+    border-right: 1px solid #dee2e6;
+}
+
+/* ============================================
+   STAFF ROWS
+   ============================================ */
+
+.rb-staff-row {
+    display: flex;
+    border-bottom: 1px solid #eee;
+    min-height: 60px;
+    position: relative;
+}
+
+.rb-staff-row:hover {
+    background: #fafafa;
+}
+
+.rb-staff-column {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 200px;
+    max-width: 200px;
+    padding: 10px 15px;
+    background: #fff;
+    position: sticky;
+    left: 0;
+    z-index: 30;
+    border-right: 1px solid #e0e0e0;
+}
+
+.rb-staff-row:hover .rb-staff-column {
+    background: #fafafa;
+}
+
+.rb-staff-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #3498db;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.rb-staff-avatar.rb-has-image {
+    background: transparent;
+}
+
+.rb-staff-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.rb-staff-info {
+    overflow: hidden;
+}
+
+.rb-staff-name {
+    font-weight: 500;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Status Dot - shows current workload status */
+.rb-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.rb-status-free {
+    background-color: #bdc3c7; /* Grey - no allocations */
+}
+
+.rb-status-available {
+    background-color: #27ae60; /* Green - under 50% */
+}
+
+.rb-status-moderate {
+    background-color: #f39c12; /* Orange - 50-80% */
+}
+
+.rb-status-busy {
+    background-color: #e67e22; /* Dark orange - 80-100% */
+}
+
+.rb-status-overbooked {
+    background-color: #e74c3c; /* Red - over 100% */
+}
+
+.rb-status-neutral {
+    background-color: #95a5a6; /* Grey - no data */
+}
+
+.rb-staff-capacity {
+    font-size: 11px;
+    color: #888;
+}
+
+.rb-staff-allocated {
+    font-size: 10px;
+    color: #3498db;
+    font-weight: 500;
+}
+
+.rb-staff-capacity.rb-overbooked {
+    color: #e74c3c;
+    font-weight: 600;
+}
+
+/* ============================================
+   TIMELINE GRID
+   ============================================ */
+
+.rb-timeline-grid {
+    display: flex;
+    flex: 1;
+    position: relative;
+    min-height: 60px;
+}
+
+.rb-timeline-cell {
+    min-width: 40px;
+    border-right: 1px solid #f5f5f5;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.rb-timeline-cell.weekend {
+    background: #fafafa;
+}
+
+.rb-timeline-cell.today {
+    background: rgba(52, 152, 219, 0.08);
+}
+
+/* Capacity status backgrounds for timeline cells */
+.rb-timeline-cell.rb-warning {
+    background: rgba(241, 196, 15, 0.15);
+}
+
+.rb-timeline-cell.rb-full {
+    background: rgba(230, 126, 34, 0.15);
+}
+
+.rb-timeline-cell.rb-overbooked {
+    background: rgba(231, 76, 60, 0.2);
+}
+
+/* Scheduled on off-day (weekend work) - subtle purple/blue */
+.rb-timeline-cell.rb-scheduled-off {
+    background: rgba(155, 89, 182, 0.15);
+}
+
+/* Today marker line */
+.rb-today-marker {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e74c3c;
+    z-index: 40;
+}
+
+/* ============================================
+   ALLOCATIONS (The draggable bars)
+   ============================================ */
+
+.rb-allocation {
+    position: absolute;
+    top: 8px;
+    height: calc(100% - 16px);
+    min-height: 40px;
+    background: #3498db;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    overflow: hidden;
+    z-index: 20;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    transition: box-shadow 0.2s, transform 0.1s;
+}
+
+.rb-allocation:hover {
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+    z-index: 25;
+}
+
+/* Overbooked allocation styling */
+.rb-allocation.rb-allocation-overbooked {
+    border: 2px solid #c0392b;
+    animation: pulse-warning 2s infinite;
+}
+
+.rb-allocation.rb-allocation-overbooked::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    border-style: solid;
+    border-width: 0 16px 16px 0;
+    border-color: transparent #c0392b transparent transparent;
+}
+
+.rb-overbooking-icon {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    color: #fff;
+    font-size: 10px;
+    text-shadow: 0 0 2px rgba(0,0,0,0.5);
+    z-index: 5;
+}
+
+@keyframes pulse-warning {
+    0%, 100% { box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+    50% { box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.4); }
+}
+
+.rb-allocation.rb-dragging {
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    opacity: 0.9;
+    z-index: 30;
+}
+
+.rb-allocation-title {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rb-allocation-hours {
+    font-size: 10px;
+    opacity: 0.9;
+}
+
+.rb-allocation-total {
+    font-size: 9px;
+    opacity: 0.75;
+    font-style: italic;
+}
+
+/* Resize handles */
+.rb-allocation .rb-resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: ew-resize;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.rb-allocation:hover .rb-resize-handle {
+    opacity: 1;
+}
+
+.rb-allocation .rb-resize-left {
+    left: 0;
+    background: linear-gradient(to right, rgba(0,0,0,0.2), transparent);
+    border-radius: 4px 0 0 4px;
+}
+
+.rb-allocation .rb-resize-right {
+    right: 0;
+    background: linear-gradient(to left, rgba(0,0,0,0.2), transparent);
+    border-radius: 0 4px 4px 0;
+}
+
+/* Allocation segments (split at weekends) */
+.rb-allocation.rb-segment-first {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.rb-allocation.rb-segment-last {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+.rb-allocation.rb-segment-middle {
+    border-radius: 0;
+}
+
+/* Visual connector for split allocations */
+.rb-allocation.rb-segment-first::after,
+.rb-allocation.rb-segment-middle::after {
+    content: '→';
+    position: absolute;
+    right: -14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    opacity: 0.5;
+    color: inherit;
+    z-index: 21;
+}
+
+/* Multi-row allocations (stacked) */
+.rb-allocation.rb-row-1 { top: 8px; }
+.rb-allocation.rb-row-2 { top: 52px; }
+.rb-allocation.rb-row-3 { top: 96px; }
+
+/* ============================================
+   TIME OFF (Different styling)
+   ============================================ */
+
+.rb-time-off {
+    background: repeating-linear-gradient(
+        45deg,
+        #95a5a6,
+        #95a5a6 5px,
+        #7f8c8d 5px,
+        #7f8c8d 10px
+    );
+    opacity: 0.7;
+}
+
+.rb-time-off.vacation {
+    background: repeating-linear-gradient(
+        45deg,
+        #27ae60,
+        #27ae60 5px,
+        #2ecc71 5px,
+        #2ecc71 10px
+    );
+}
+
+.rb-time-off.sick {
+    background: repeating-linear-gradient(
+        45deg,
+        #c0392b,
+        #c0392b 5px,
+        #e74c3c 5px,
+        #e74c3c 10px
+    );
+}
+
+/* ============================================
+   CAPACITY INDICATORS
+   ============================================ */
+
+.rb-capacity-bar {
+    position: absolute;
+    bottom: 2px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #e0e0e0;
+    border-radius: 2px;
+}
+
+.rb-capacity-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s;
+}
+
+.rb-capacity-fill.rb-low { background: #27ae60; }
+.rb-capacity-fill.rb-medium { background: #f39c12; }
+.rb-capacity-fill.rb-high { background: #e67e22; }
+.rb-capacity-fill.rb-full { background: #e74c3c; }
+.rb-capacity-fill.rb-overbooked { 
+    background: #c0392b;
+    /* Overflow indicator */
+}
+
+/* Daily capacity tooltip */
+.rb-capacity-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 100;
+}
+
+.rb-timeline-cell:hover .rb-capacity-tooltip {
+    opacity: 1;
+}
+
+/* ============================================
+   LEGEND
+   ============================================ */
+
+.rb-legend {
+    display: inline-flex;
+    gap: 15px;
+    font-size: 11px;
+}
+
+.rb-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.rb-legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.rb-legend-color.rb-low { background: #27ae60; }
+.rb-legend-color.rb-high { background: #e67e22; }
+.rb-legend-color.rb-overbooked { background: #c0392b; }
+
+/* ============================================
+   TOOLBAR & NAVIGATION
+   ============================================ */
+
+.rb-date-nav .btn {
+    padding: 6px 12px;
+}
+
+.rb-view-toggle .btn.active {
+    background: #3498db;
+    color: #fff;
+    border-color: #3498db;
+}
+
+/* ============================================
+   LOADING STATE
+   ============================================ */
+
+.rb-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+    color: #888;
+}
+
+.rb-loading.hidden {
+    display: none;
+}
+
+.rb-loading i {
+    margin-bottom: 10px;
+    color: #3498db;
+}
+
+/* ============================================
+   EMPTY STATE
+   ============================================ */
+
+.rb-empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #888;
+}
+
+.rb-empty-state i {
+    font-size: 48px;
+    margin-bottom: 15px;
+    opacity: 0.5;
+}
+
+/* ============================================
+   MODAL ENHANCEMENTS
+   ============================================ */
+
+#rb-allocation-modal .modal-body,
+#rb-timeoff-modal .modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+#rb-overbooking-warning {
+    margin-top: 15px;
+    margin-bottom: 0;
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 992px) {
+    .rb-staff-column-header,
+    .rb-staff-column {
+        min-width: 150px;
+        max-width: 150px;
+    }
+    
+    .rb-date-cell {
+        min-width: 35px;
+    }
+}
+
+@media (max-width: 768px) {
+    .rb-staff-column-header,
+    .rb-staff-column {
+        min-width: 120px;
+        max-width: 120px;
+    }
+    
+    .rb-staff-avatar {
+        width: 28px;
+        height: 28px;
+        font-size: 11px;
+    }
+    
+    .rb-legend {
+        display: none;
+    }
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+    .rb-board-container {
+        overflow: visible;
+    }
+    
+    .rb-board-body {
+        max-height: none;
+        overflow: visible;
+    }
+    
+    .rb-allocation {
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+}
