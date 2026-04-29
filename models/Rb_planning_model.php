@@ -810,7 +810,6 @@ class Rb_planning_model extends App_Model
             p.name        AS project_name,
             p.start_date  AS project_start,
             p.deadline    AS project_deadline,
-            p.color       AS project_color,
             a.id          AS allocation_id,
             a.hours_per_day,
             a.color       AS override_color,
@@ -858,7 +857,7 @@ class Rb_planning_model extends App_Model
             if (empty($df) || empty($dt)) continue;
 
             $color = !empty($row['override_color']) ? $row['override_color']
-                   : (!empty($row['project_color']) ? $row['project_color'] : '#3498db');
+                   : rb_project_color((int)$row['project_id']);
 
             $allocations[] = [
                 'id'              => !empty($row['allocation_id']) ? (int)$row['allocation_id'] : 'p_' . $row['staff_id'] . '_' . $row['project_id'],
@@ -1144,7 +1143,7 @@ class Rb_planning_model extends App_Model
      */
     public function get_project_dates($project_id)
     {
-        return $this->db->select('id, name, start_date, deadline, color')
+        return $this->db->select('id, name, start_date, deadline')
             ->where('id', $project_id)
             ->get(db_prefix() . 'projects')->row_array();
     }

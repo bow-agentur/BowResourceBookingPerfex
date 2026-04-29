@@ -12,6 +12,9 @@ var PB_Modal = (function () {
 
     var _cfg = {}, _st = {}, _reload = function () {};
 
+    // Cache task data keyed by task ID — populated by loadTasksDropdown
+    var _taskCache = {};
+
     function setContext(config, state, reloadFn) {
         _cfg    = config;
         _st     = state;
@@ -30,11 +33,11 @@ var PB_Modal = (function () {
         if ($form) $form.reset();
 
         $('#rb-overbooking-warning').hide();
+        _taskCache = {};
         $('#rb-alloc-task')
             .empty()
             .append('<option value="">— kein Task —</option>')
             .selectpicker('refresh');
-        $('#rb-alloc-follower').prop('checked', false);
 
         if (id) {
             // ── Edit existing ───────────────────────────────────────────────
@@ -76,6 +79,10 @@ var PB_Modal = (function () {
     // PROJECT / TASK AUTO-FILL
     // =========================================================================
 
+    /**
+     * Fetch project start/deadline and pre-fill the date fields.
+     * Called when project dropdown changes.
+     */
     function fetchProjectDates(projectId) {
         $.ajax({
             url:      _cfg.apiUrl + '/api_get_project/' + projectId,
@@ -91,30 +98,49 @@ var PB_Modal = (function () {
         });
     }
 
+    /**
+     * Use cached task data to pre-fill start date, end date, and hours/day.
+     * Falls back to searching existing state.allocations for already-saved overrides.
+     * Called when task dropdown changes.
+     */
     function fetchTaskDates(taskId) {
-        // Try state first (faster); fall back to API
-        var ta = _st.allocations.find(function (a) {
-            return a.type === 'task' && String(a.task_id) === String(taskId);
-        });
-        if (ta) {
-            if (ta.start_date) $('#rb-alloc-start').val(ta.start_date);
-            if (ta.end_date)   $('#rb-alloc-end').val(ta.end_date);
-            if (ta.estimated_hours) {
-                var days = PB_Utils.countWorkingDays(
-                    new Date($('#rb-alloc-start').val()),
-                    new Date($('#rb-alloc-end').val())
-                );
+        var task = _taskCache[taskId];
+        if (task) {
+            var start = task.startdate || task.start_date || '';
+            var end   = task.duedate   || task.end_date   || '';
+            if (start) $('#rb-alloc-start').val(start);
+            if (end)   $('#rb-alloc-end').val(end);
+
+            // Auto-compute hours/day from estimated_hours ÷ working days
+            var est = parseFloat(task.estimated_hours) || 0;
+            if (est > 0 && start && end) {
+                var days = PB_Utils.countWorkingDays(new Date(start), new Date(end));
                 if (days > 0) {
-                    $('#rb-alloc-hours').val(
-                        Math.round((ta.estimated_hours / days) * 10) / 10
-                    );
+                    $('#rb-alloc-hours').val(Math.round((est / days) * 10) / 10);
                 }
             }
+            updateTotalHoursDisplay();
+            return;
+        }
+
+        // Fallback: look for an existing override in state
+        var existing = _st.allocations.find(function (a) {
+            return a.type === 'task' && String(a.task_id) === String(taskId);
+        });
+        if (existing) {
+            if (existing.start_date) $('#rb-alloc-start').val(existing.start_date);
+            if (existing.end_date)   $('#rb-alloc-end').val(existing.end_date);
+            if (existing.hours_per_day) $('#rb-alloc-hours').val(existing.hours_per_day);
             updateTotalHoursDisplay();
         }
     }
 
+    /**
+     * Load tasks for a project into the task dropdown and populate _taskCache.
+     * Optionally pre-selects a task by ID (for edit mode).
+     */
     function loadTasksDropdown(projectId, selectedTaskId) {
+        _taskCache = {}; // Reset cache for this project
         $.ajax({
             url:      _cfg.apiUrl + '/api_get_tasks',
             type:     'GET',
@@ -124,13 +150,14 @@ var PB_Modal = (function () {
                 var $s = $('#rb-alloc-task');
                 $s.empty().append('<option value="">— kein Task —</option>');
                 (r.tasks || []).forEach(function (t) {
+                    // Cache task data for date auto-fill
+                    _taskCache[t.id] = t;
+                    var label = PB_Utils.escHtml(t.name);
+                    if (t.estimated_hours) label += ' (' + t.estimated_hours + 'h)';
                     $s.append(
                         '<option value="' + t.id + '"'
                         + (String(t.id) === String(selectedTaskId) ? ' selected' : '')
-                        + '>'
-                        + PB_Utils.escHtml(t.name)
-                        + (t.estimated_hours ? ' (' + t.estimated_hours + 'h)' : '')
-                        + '</option>'
+                        + '>' + label + '</option>'
                     );
                 });
                 $s.selectpicker('refresh');
@@ -152,7 +179,6 @@ var PB_Modal = (function () {
             date_to:          $('#rb-alloc-end').val(),
             hours_per_day:    $('#rb-alloc-hours').val(),
             include_weekends: $('#rb-alloc-weekends').is(':checked') ? 1 : 0,
-            add_as_follower:  $('#rb-alloc-follower').is(':checked') ? 1 : 0,
             note:             $('#rb-alloc-note').val()
         };
 
@@ -168,7 +194,7 @@ var PB_Modal = (function () {
         var errLang = (_cfg.lang && _cfg.lang.errorSaving) || 'Fehler beim Speichern';
 
         if (id && /^\d+$/.test(id)) {
-            // ── Update override ──────────────────────────────────────────────
+            // ── Update existing override ─────────────────────────────────────
             data.id = id;
             $.ajax({
                 url:      _cfg.apiUrl + '/api_upsert_override',
@@ -187,15 +213,15 @@ var PB_Modal = (function () {
                 error: function () { alert_float('danger', errLang); }
             });
         } else {
-            // ── New: assign member, then upsert override ─────────────────────
+            // ── New: assign member (controller adds as follower automatically),
+            //        then save override with dates/hours ───────────────────────
             $.ajax({
                 url:  _cfg.apiUrl + '/api_assign_member',
                 type: 'POST',
                 data: {
-                    staff_id:        data.staff_id,
-                    project_id:      data.project_id,
-                    task_id:         data.task_id,
-                    add_as_follower: data.add_as_follower
+                    staff_id:   data.staff_id,
+                    project_id: data.project_id,
+                    task_id:    data.task_id
                 },
                 dataType: 'json',
                 success: function (r) {
@@ -205,7 +231,7 @@ var PB_Modal = (function () {
                             type:     'POST',
                             data:     data,
                             dataType: 'json',
-                            success:  function () {
+                            success: function () {
                                 $('#rb-allocation-modal').modal('hide');
                                 alert_float('success', 'Erstellt');
                                 _reload();
@@ -244,7 +270,7 @@ var PB_Modal = (function () {
                 task_id:    alloc ? alloc.task_id    : ''
             },
             dataType: 'json',
-            success:  function () {
+            success: function () {
                 $('#rb-allocation-modal').modal('hide');
                 alert_float('success', 'Gelöscht');
                 _reload();
@@ -283,7 +309,7 @@ var PB_Modal = (function () {
     }
 
     // =========================================================================
-    // INLINE EDIT (double-click on hours label in task bar)
+    // INLINE EDIT (double-click hours label on a task bar)
     // =========================================================================
 
     function initInlineEdit() {
@@ -347,15 +373,15 @@ var PB_Modal = (function () {
     // =========================================================================
 
     return {
-        setContext:             setContext,
-        openAllocationModal:    openAllocationModal,
-        fetchProjectDates:      fetchProjectDates,
-        fetchTaskDates:         fetchTaskDates,
-        loadTasksDropdown:      loadTasksDropdown,
-        saveAllocation:         saveAllocation,
-        deleteAllocation:       deleteAllocation,
-        saveTimeOff:            saveTimeOff,
-        initInlineEdit:         initInlineEdit,
+        setContext:              setContext,
+        openAllocationModal:     openAllocationModal,
+        fetchProjectDates:       fetchProjectDates,
+        fetchTaskDates:          fetchTaskDates,
+        loadTasksDropdown:       loadTasksDropdown,
+        saveAllocation:          saveAllocation,
+        deleteAllocation:        deleteAllocation,
+        saveTimeOff:             saveTimeOff,
+        initInlineEdit:          initInlineEdit,
         updateTotalHoursDisplay: updateTotalHoursDisplay
     };
 

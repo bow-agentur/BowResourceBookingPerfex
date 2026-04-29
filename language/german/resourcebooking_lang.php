@@ -223,3 +223,9 @@ $lang['collapse_expand']            = 'Zeile ein-/ausklappen';
 $lang['task_hours_updated']         = 'Stunden aktualisiert';
 
 $lang['add_as_follower']            = 'Als Projekt-Follower hinzufügen';
+$lang['start_date']                 = 'Startdatum';
+$lang['end_date']                   = 'Enddatum';
+$lang['from']                       = 'Von';
+$lang['to']                         = 'Bis';
+$lang['no_records_found']           = 'Keine Einträge gefunden';
+$lang['hours_use']                  = 'Geplante Stunden';

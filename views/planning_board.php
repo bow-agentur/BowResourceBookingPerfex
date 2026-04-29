@@ -208,7 +208,7 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label for="rb-alloc-start"><?php echo _l('start_time'); ?> <span class="text-danger">*</span></label>
+                                <label for="rb-alloc-start"><?php echo _l('start_date'); ?> <span class="text-danger">*</span></label>
                                 <div class="input-group date">
                                     <input type="text" class="form-control datepicker" name="start_date" 
                                            id="rb-alloc-start" required>
@@ -218,7 +218,7 @@
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label for="rb-alloc-end"><?php echo _l('end_time'); ?> <span class="text-danger">*</span></label>
+                                <label for="rb-alloc-end"><?php echo _l('end_date'); ?> <span class="text-danger">*</span></label>
                                 <div class="input-group date">
                                     <input type="text" class="form-control datepicker" name="end_date" 
                                            id="rb-alloc-end" required>
@@ -243,11 +243,6 @@
                     <div class="form-group">
                         <label for="rb-alloc-note"><?php echo _l('note'); ?></label>
                         <textarea class="form-control" name="note" id="rb-alloc-note" rows="3"></textarea>
-                    </div>
-
-                    <div class="checkbox checkbox-primary">
-                        <input type="checkbox" name="add_as_follower" id="rb-alloc-follower" value="1">
-                        <label for="rb-alloc-follower"><?php echo _l('add_as_follower'); ?></label>
                     </div>
                     
                     <!-- Overbooking Warning -->

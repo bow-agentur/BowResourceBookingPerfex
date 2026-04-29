@@ -204,20 +204,7 @@ if (!function_exists('rb_project_color')) {
             return '#808080'; // Gray for no project
         }
         
-        $CI = &get_instance();
-        
-        // Try to get project color from database
-        $project = $CI->db->select('color')
-            ->from(db_prefix() . 'projects')
-            ->where('id', $project_id)
-            ->get()
-            ->row();
-        
-        if ($project && !empty($project->color)) {
-            return $project->color;
-        }
-        
-        // Generate consistent color from project ID
+        // Generate consistent color from project ID (tblprojects has no color column)
         $colors = [
             '#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6',
             '#1abc9c', '#e67e22', '#34495e', '#16a085', '#27ae60',
