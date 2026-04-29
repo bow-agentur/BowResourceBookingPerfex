@@ -182,6 +182,16 @@
                             <?php endforeach; ?>
                         </select>
                     </div>
+
+                    <div class="form-group" id="rb-task-group">
+                        <label for="rb-alloc-task"><?php echo _l('task'); ?></label>
+                        <select name="task_id" id="rb-alloc-task" class="selectpicker"
+                                data-live-search="true" data-width="100%"
+                                title="<?php echo _l('select_task_optional'); ?>">
+                            <option value=""><?php echo _l('no_task'); ?></option>
+                        </select>
+                        <small class="text-muted"><?php echo _l('task_auto_fills_dates'); ?></small>
+                    </div>
                     
                     <div class="row">
                         <div class="col-md-6">
@@ -338,6 +348,8 @@ $(function() {
             canEdit: <?php echo has_permission('resourcebooking', '', 'edit') ? 'true' : 'false'; ?>,
             canDelete: <?php echo has_permission('resourcebooking', '', 'delete') ? 'true' : 'false'; ?>,
             canCreate: <?php echo has_permission('resourcebooking', '', 'create') ? 'true' : 'false'; ?>,
+            isEmployee: <?php echo isset($is_employee) && $is_employee ? 'true' : 'false'; ?>,
+            ownStaffId: <?php echo isset($own_staff_id) ? (int)$own_staff_id : 'null'; ?>,
             lang: {
                 loading: '<?php echo _l("loading_board"); ?>',
                 noAllocations: '<?php echo _l("no_allocations"); ?>',

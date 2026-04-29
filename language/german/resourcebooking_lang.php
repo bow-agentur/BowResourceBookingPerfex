@@ -204,3 +204,20 @@ $lang['error_hours_invalid'] = 'Stunden pro Tag müssen zwischen 0,5 und 24 lieg
 $lang['error_staff_required'] = 'Bitte wählen Sie einen Mitarbeiter aus';
 $lang['error_loading_board'] = 'Fehler beim Laden der Planungstafel';
 $lang['error_saving_allocation'] = 'Fehler beim Speichern der Zuweisung';
+
+// v2.0 — Task-Integration, HR, Berechtigungen
+$lang['task']                       = 'Aufgabe';
+$lang['tasks']                      = 'Aufgaben';
+$lang['no_task']                    = 'Kein Task';
+$lang['select_task_optional']       = 'Task wählen (optional)';
+$lang['task_auto_fills_dates']      = 'Task-Auswahl füllt Start-/Enddatum automatisch.';
+$lang['estimated_hours']            = 'Geschätzte Stunden';
+$lang['daily_avg']                  = '⌀ h/Tag';
+$lang['assign_to_project']          = 'Zum Projekt zuweisen';
+$lang['assign_to_task']             = 'Zum Task zuweisen';
+$lang['remove_from_project']        = 'Von Projekt entfernen';
+$lang['remove_from_task']           = 'Von Task entfernen';
+$lang['overload_warning']           = 'Überlastung erkannt';
+$lang['own_row_label']              = 'Ich';
+$lang['collapse_expand']            = 'Zeile ein-/ausklappen';
+$lang['task_hours_updated']         = 'Stunden aktualisiert';

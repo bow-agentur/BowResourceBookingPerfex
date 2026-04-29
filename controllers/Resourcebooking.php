@@ -59,6 +59,9 @@ class Resourcebooking extends AdminController
     $data['date_to']   = $date_to;
     $data['staff']     = $staff;
     $data['projects']  = $projects;
+    // v2.0: employee vs. admin distinction
+    $data['is_employee']  = !is_admin();
+    $data['own_staff_id'] = get_staff_user_id();
 
     $this->load->view('planning_board', $data);
   }
@@ -571,5 +574,216 @@ class Resourcebooking extends AdminController
     $this->load->model('resourcebooking/rb_planning_model');
     $projects = $this->rb_planning_model->get_active_projects();
     echo json_encode(['projects' => $projects]);
+  }
+
+  // ===========================================================================
+  // PLANNING BOARD v2.0 — Live-Write API
+  // ===========================================================================
+
+  /**
+   * API: Assign staff member to project or task (writes to Perfex)
+   * POST: staff_id, project_id [, task_id]
+   */
+  public function api_assign_member()
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('resourcebooking', '', 'create')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['success' => false, 'error' => 'Access denied']);
+      return;
+    }
+
+    $this->load->model('resourcebooking/rb_planning_model');
+
+    $staff_id   = (int)$this->input->post('staff_id');
+    $project_id = (int)$this->input->post('project_id');
+    $task_id    = (int)$this->input->post('task_id');
+
+    if (!$staff_id) {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'staff_id required']);
+      return;
+    }
+
+    if ($task_id) {
+      $ok = $this->rb_planning_model->assign_staff_to_task($staff_id, $task_id);
+    } elseif ($project_id) {
+      $ok = $this->rb_planning_model->assign_staff_to_project($staff_id, $project_id);
+    } else {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'project_id or task_id required']);
+      return;
+    }
+
+    echo json_encode(['success' => (bool)$ok]);
+  }
+
+  /**
+   * API: Remove staff member from project or task
+   * POST: staff_id, project_id [, task_id]
+   */
+  public function api_remove_member()
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('resourcebooking', '', 'delete')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['success' => false, 'error' => 'Access denied']);
+      return;
+    }
+
+    $this->load->model('resourcebooking/rb_planning_model');
+
+    $staff_id   = (int)$this->input->post('staff_id');
+    $project_id = (int)$this->input->post('project_id');
+    $task_id    = (int)$this->input->post('task_id');
+
+    if (!$staff_id) {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'staff_id required']);
+      return;
+    }
+
+    if ($task_id) {
+      $ok = $this->rb_planning_model->remove_staff_from_task($staff_id, $task_id);
+    } elseif ($project_id) {
+      $ok = $this->rb_planning_model->remove_staff_from_project($staff_id, $project_id);
+    } else {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'project_id or task_id required']);
+      return;
+    }
+
+    echo json_encode(['success' => (bool)$ok]);
+  }
+
+  /**
+   * API: Update estimated_hours on a task
+   * POST: task_id, estimated_hours
+   */
+  public function api_update_task_hours()
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('resourcebooking', '', 'edit')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['success' => false, 'error' => 'Access denied']);
+      return;
+    }
+
+    $this->load->model('resourcebooking/rb_planning_model');
+
+    $task_id         = (int)$this->input->post('task_id');
+    $estimated_hours = $this->input->post('estimated_hours');
+
+    if (!$task_id || $estimated_hours === null) {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'task_id and estimated_hours required']);
+      return;
+    }
+
+    $ok = $this->rb_planning_model->update_task_hours($task_id, $estimated_hours);
+    echo json_encode(['success' => (bool)$ok]);
+  }
+
+  /**
+   * API: UPSERT planning override in rb_allocations
+   * POST: staff_id, project_id [, task_id], hours_per_day, color, note, date_from, date_to
+   */
+  public function api_upsert_override()
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('resourcebooking', '', 'edit')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['success' => false, 'error' => 'Access denied']);
+      return;
+    }
+
+    $this->load->model('resourcebooking/rb_planning_model');
+
+    $data = [
+      'staff_id'        => $this->input->post('staff_id'),
+      'project_id'      => $this->input->post('project_id') ?: null,
+      'task_id'         => $this->input->post('task_id') ?: null,
+      'hours_per_day'   => $this->input->post('hours_per_day'),
+      'color'           => $this->input->post('color'),
+      'note'            => $this->input->post('note'),
+      'date_from'       => $this->input->post('date_from'),
+      'date_to'         => $this->input->post('date_to'),
+      'include_weekends'=> $this->input->post('include_weekends'),
+    ];
+
+    if (empty($data['staff_id'])) {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'staff_id required']);
+      return;
+    }
+
+    $id = $this->rb_planning_model->upsert_override($data);
+    echo json_encode(['success' => (bool)$id, 'id' => $id]);
+  }
+
+  /**
+   * API: Get single project with start_date and deadline (for auto-fill)
+   * GET: project_id
+   */
+  public function api_get_project($project_id = '')
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('resourcebooking', '', 'view')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['error' => 'Access denied']);
+      return;
+    }
+
+    $id = $project_id ?: $this->input->get('project_id');
+
+    if (!$id || !is_numeric($id)) {
+      $this->output->set_status_header(400);
+      echo json_encode(['error' => 'Invalid project_id']);
+      return;
+    }
+
+    $this->load->model('resourcebooking/rb_planning_model');
+    $project = $this->rb_planning_model->get_project_dates((int)$id);
+
+    if (!$project) {
+      $this->output->set_status_header(404);
+      echo json_encode(['error' => 'Project not found']);
+      return;
+    }
+
+    echo json_encode(['project' => $project]);
+  }
+
+  /**
+   * API: Get tasks for a project (optionally filtered by staff)
+   * GET: project_id [, staff_id]
+   */
+  public function api_get_tasks()
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('resourcebooking', '', 'view')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['error' => 'Access denied']);
+      return;
+    }
+
+    $project_id = (int)$this->input->get('project_id');
+    $staff_id   = (int)$this->input->get('staff_id') ?: null;
+
+    if (!$project_id) {
+      $this->output->set_status_header(400);
+      echo json_encode(['error' => 'project_id required']);
+      return;
+    }
+
+    $this->load->model('resourcebooking/rb_planning_model');
+    $tasks = $this->rb_planning_model->get_tasks_for_project($project_id, $staff_id);
+    echo json_encode(['tasks' => $tasks]);
   }
 }

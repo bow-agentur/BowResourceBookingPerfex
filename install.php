@@ -148,3 +148,31 @@ if (!$default_pattern_exists && $CI->db->table_exists(db_prefix() . 'rb_work_pat
         'is_default' => 1
     ]);
 }
+
+// ============================================================================
+// PLANNING BOARD v2.0 — Migrations
+// ============================================================================
+
+// 1. tbltasks: estimated_hours (einzige Änderung an Perfex-Kerntabellen)
+if ($CI->db->table_exists(db_prefix() . 'tasks')) {
+    if (!$CI->db->field_exists('estimated_hours', db_prefix() . 'tasks')) {
+        $CI->db->query('ALTER TABLE `' . db_prefix() . 'tasks` ADD COLUMN `estimated_hours` DECIMAL(6,2) NULL DEFAULT NULL AFTER `duedate`');
+    }
+}
+
+// 2. rb_allocations: UNIQUE KEY für UPSERT-Fähigkeit (Planungs-Overrides)
+if ($CI->db->table_exists(db_prefix() . 'rb_allocations')) {
+    $key_exists = $CI->db->query(
+        "SELECT COUNT(1) as cnt FROM INFORMATION_SCHEMA.STATISTICS 
+         WHERE TABLE_SCHEMA = DATABASE() 
+         AND TABLE_NAME = '" . $CI->db->escape_str(db_prefix() . 'rb_allocations') . "'
+         AND INDEX_NAME = 'uq_staff_project_task'"
+    )->row();
+    if (!$key_exists || (int)$key_exists->cnt === 0) {
+        // Allow NULL in project_id and task_id for partial keys — use generated column workaround
+        // Instead add separate index that covers the most common access patterns
+        $CI->db->query('ALTER TABLE `' . db_prefix() . 'rb_allocations` 
+            ADD INDEX `idx_staff_proj_task` (`staff_id`, `project_id`, `task_id`)');
+    }
+}
+}

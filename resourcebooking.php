@@ -18,6 +18,10 @@ define('RESOURCEBOOKING_MODULE_UPLOAD_FOLDER', module_dir_path(RESOURCEBOOKING_M
 hooks()->add_action('admin_init', 'resourcebooking_permissions');
 hooks()->add_action('admin_init', 'resourcebooking_module_init_menu_items');
 
+// Task hooks: persist estimated_hours when tasks are created/updated
+hooks()->add_action('before_add_task', 'resourcebooking_before_add_task');
+hooks()->add_action('before_update_task', 'resourcebooking_before_update_task');
+
 /**
 * Register activation module hook
 */
@@ -87,4 +91,32 @@ function resourcebooking_permissions()
     ];
 
     register_staff_capabilities('resourcebooking', $capabilities, _l('resourcebooking'));
+}
+
+/**
+ * Hook: persist estimated_hours when a new task is created
+ *
+ * @param array $data Task data passed by reference
+ */
+function resourcebooking_before_add_task(&$data)
+{
+    $CI = &get_instance();
+    $estimated = $CI->input->post('estimated_hours');
+    if ($estimated !== null && $estimated !== '') {
+        $data['estimated_hours'] = max(0, (float)$estimated);
+    }
+}
+
+/**
+ * Hook: persist estimated_hours when an existing task is updated
+ *
+ * @param array $data Task data passed by reference
+ */
+function resourcebooking_before_update_task(&$data)
+{
+    $CI = &get_instance();
+    $estimated = $CI->input->post('estimated_hours');
+    if ($estimated !== null && $estimated !== '') {
+        $data['estimated_hours'] = max(0, (float)$estimated);
+    }
 }

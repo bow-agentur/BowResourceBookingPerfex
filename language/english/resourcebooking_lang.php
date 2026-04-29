@@ -204,3 +204,20 @@ $lang['error_hours_invalid'] = 'Hours per day must be between 0.5 and 24';
 $lang['error_staff_required'] = 'Please select a staff member';
 $lang['error_loading_board'] = 'Error loading planning board';
 $lang['error_saving_allocation'] = 'Error saving allocation';
+
+// v2.0 — Task integration, HR, permissions
+$lang['task']                       = 'Task';
+$lang['tasks']                      = 'Tasks';
+$lang['no_task']                    = 'No task';
+$lang['select_task_optional']       = 'Select task (optional)';
+$lang['task_auto_fills_dates']      = 'Selecting a task auto-fills start/end date.';
+$lang['estimated_hours']            = 'Estimated hours';
+$lang['daily_avg']                  = 'avg h/d';
+$lang['assign_to_project']          = 'Assign to project';
+$lang['assign_to_task']             = 'Assign to task';
+$lang['remove_from_project']        = 'Remove from project';
+$lang['remove_from_task']           = 'Remove from task';
+$lang['overload_warning']           = 'Overload detected';
+$lang['own_row_label']              = 'Me';
+$lang['collapse_expand']            = 'Collapse/expand row';
+$lang['task_hours_updated']         = 'Hours updated';

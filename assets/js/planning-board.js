@@ -1,968 +1,207 @@
 /**
- * Planning Board - Float-like Resource Timeline
- * JavaScript for the resource planning board with drag & drop
- * 
- * Uses interact.js for drag & resize functionality
- * 
+ * Planning Board v2.0 — Float-like Resource Timeline
+ * Lane-packing, task sub-bars, live Perfex data, HR integration
+ *
  * @since 2.0.0
  */
-
-var PlanningBoard = (function() {
+var PlanningBoard = (function () {
     'use strict';
-    
-    // Configuration
+
     var config = {
-        baseUrl: '',
-        csrfToken: '',
-        canEdit: false,
-        canDelete: false,
-        canCreate: false,
-        lang: {}
+        baseUrl:    '',
+        apiUrl:     '',
+        csrfToken:  '',
+        canEdit:    false,
+        canDelete:  false,
+        canCreate:  false,
+        isEmployee: false,
+        ownStaffId: null,
+        lang:       {}
     };
-    
-    // State
+
     var state = {
-        currentView: 'month', // 'week' or 'month'
-        startDate: null,
-        endDate: null,
-        staff: [],
-        allocations: [],
-        timeOff: [],
-        projects: [],
-        capacity: {}, // capacity per staff per day
-        cellWidth: 40, // pixels per day
-        isLoading: false,
-        filterStaff: null,
-        filterProject: null
+        currentView:    'month',
+        startDate:      null,
+        endDate:        null,
+        staff:          [],
+        allocations:    [],
+        timeOff:        [],
+        projects:       [],
+        capacity:       {},
+        cellWidth:      40,
+        isLoading:      false,
+        filterStaff:    null,
+        filterProject:  null,
+        collapsedStaff: {}
     };
-    
-    // DOM Elements
-    var $board, $dateHeader, $datesContainer, $boardBody;
-    
-    /**
-     * Initialize the planning board
-     */
+
+    var $boardBody, $datesContainer;
+
+    // =========================================================================
+    // INIT
+    // =========================================================================
+
     function init(options) {
         $.extend(config, options);
-        
-        // Check interact.js availability
-        if (typeof interact === 'undefined') {
-            // interact.js not loaded - drag/drop will be disabled
-        }
-        
-        // Set initial date range
+
         var today = new Date();
         if (state.currentView === 'month') {
             state.startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-            state.endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            state.endDate   = new Date(today.getFullYear(), today.getMonth() + 1, 0);
         } else {
-            // Week view: Monday to Sunday
-            var day = today.getDay();
+            var day  = today.getDay();
             var diff = today.getDate() - day + (day === 0 ? -6 : 1);
             state.startDate = new Date(today.setDate(diff));
-            state.endDate = new Date(state.startDate);
+            state.endDate   = new Date(state.startDate);
             state.endDate.setDate(state.endDate.getDate() + 6);
         }
-        
-        // Cache DOM elements
-        $board = $('.rb-board-container');
-        $dateHeader = $('#rb-date-header');
+
+        $boardBody      = $('#rb-board-body');
         $datesContainer = $('#rb-dates-container');
-        $boardBody = $('#rb-board-body');
-        
-        // Bind events
+
         bindEvents();
-        
-        // Sync horizontal scroll between header and body
         bindScrollSync();
-        
-        // Load initial data
+        updateDateInputs();
         loadBoardData();
     }
-    
-    /**
-     * Synchronize horizontal scroll between date header and body
-     */
+
+    // =========================================================================
+    // SCROLL SYNC
+    // =========================================================================
+
     function bindScrollSync() {
-        // When body scrolls horizontally, move the date header via transform
-        $boardBody.on('scroll', function() {
-            var scrollLeft = $(this).scrollLeft();
-            // Use transform for smooth performance
-            $datesContainer.css('transform', 'translateX(-' + scrollLeft + 'px)');
+        $boardBody.on('scroll', function () {
+            $datesContainer.css('transform', 'translateX(-' + $(this).scrollLeft() + 'px)');
         });
     }
-    
-    /**
-     * Bind all event handlers
-     */
+
+    // =========================================================================
+    // EVENTS
+    // =========================================================================
+
     function bindEvents() {
-        // Navigation
         $('#rb-prev').on('click', navigatePrev);
         $('#rb-next').on('click', navigateNext);
         $('#rb-today').on('click', navigateToday);
-        
-        // Apply custom date range
         $('#rb-apply-dates').on('click', applyCustomDateRange);
-        
-        // View toggle
-        $('.rb-view-btn').on('click', function() {
-            var view = $(this).data('view');
-            changeView(view);
-        });
-        
-        // Filters
-        $('#rb-filter-staff').on('change', function() {
+
+        $('.rb-view-btn').on('click', function () { changeView($(this).data('view')); });
+
+        $('#rb-filter-staff').on('change', function () {
             state.filterStaff = $(this).val() || null;
             renderBoard();
         });
-        
-        $('#rb-filter-project').on('change', function() {
+
+        $('#rb-filter-project').on('change', function () {
             state.filterProject = $(this).val() || null;
             renderBoard();
         });
-        
-        // Add allocation button
-        $('#rb-add-allocation').on('click', function() {
-            openAllocationModal();
-        });
-        
-        // Modal save buttons
+
+        if (config.canCreate) {
+            $('#rb-add-allocation').on('click', function () { openAllocationModal(); });
+        }
+
         $('#rb-save-allocation').on('click', saveAllocation);
         $('#rb-save-timeoff').on('click', saveTimeOff);
         $('#rb-delete-allocation').on('click', deleteAllocation);
-        
-        // Form change handlers for live total calculation
+
         $('#rb-alloc-start, #rb-alloc-end, #rb-alloc-hours').on('change', updateTotalHoursDisplay);
-        
-        // Double-click on allocation to edit
-        $boardBody.on('dblclick', '.rb-allocation', function(e) {
+
+        $('#rb-alloc-project').on('changed.bs.select change', function () {
+            var pid = $(this).val();
+            if (pid) {
+                fetchProjectDates(pid);
+                loadTasksDropdown(pid, null);
+            } else {
+                $('#rb-alloc-task').empty()
+                    .append('<option value="">— kein Task —</option>')
+                    .selectpicker('refresh');
+            }
+        });
+
+        $('#rb-alloc-task').on('changed.bs.select change', function () {
+            var tid = $(this).val();
+            if (tid) fetchTaskDates(tid);
+        });
+
+        $boardBody.on('dblclick', '.rb-allocation[data-id]', function (e) {
             e.stopPropagation();
-            var id = $(this).data('id');
-            openAllocationModal(id);
+            var rawId = $(this).data('id');
+            if (!config.isEmployee && (typeof rawId === 'number' || /^\d+$/.test(rawId))) {
+                openAllocationModal(rawId);
+            }
         });
-        
-        // Double-click on empty cell to create
-        $boardBody.on('dblclick', '.rb-timeline-cell', function(e) {
-            if (!config.canCreate) return;
-            if ($(e.target).hasClass('rb-allocation')) return;
-            
-            var staffId = $(this).closest('.rb-staff-row').data('staff-id');
-            var date = $(this).data('date');
-            openAllocationModal(null, staffId, date);
+
+        if (config.canCreate) {
+            $boardBody.on('dblclick', '.rb-lane-cell', function (e) {
+                if ($(e.target).closest('.rb-allocation').length) return;
+                var staffId = $(this).closest('.rb-staff-group').data('staff-id');
+                var date    = $(this).data('date');
+                openAllocationModal(null, staffId, date);
+            });
+        }
+
+        $boardBody.on('click', '.rb-staff-toggle', function () {
+            var $group  = $(this).closest('.rb-staff-group');
+            var staffId = $group.data('staff-id');
+            state.collapsedStaff[staffId] = !state.collapsedStaff[staffId];
+            $group.toggleClass('rb-collapsed', !!state.collapsedStaff[staffId]);
         });
-        
-        // Initialize datepickers
-        $('.datepicker').datepicker({
-            format: 'yyyy-mm-dd',
-            autoclose: true,
-            todayHighlight: true
-        });
-        
-        // Update date inputs when state changes
-        updateDateInputs();
+
+        if (config.canEdit) {
+            $boardBody.on('dblclick', '.rb-inline-editable', function (e) {
+                e.stopPropagation();
+                var $el    = $(this);
+                var taskId = $el.data('task-id');
+                var hours  = $el.data('hours') || '';
+                var $input = $('<input type="number" min="0.5" step="0.5" style="width:60px;padding:0 2px" value="' + hours + '">');
+                $el.replaceWith($input);
+                $input.focus().select();
+                $input.on('blur keydown', function (ev) {
+                    if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== 'Escape') return;
+                    var val = parseFloat($input.val());
+                    $input.replaceWith($el);
+                    if (!isNaN(val) && val > 0 && ev.key !== 'Escape') {
+                        $.ajax({
+                            url:  config.apiUrl + '/api_update_task_hours',
+                            type: 'POST',
+                            data: { task_id: taskId, estimated_hours: val },
+                            dataType: 'json',
+                            success: function (r) {
+                                if (r.success) { alert_float('success', 'Stunden aktualisiert'); loadBoardData(); }
+                            }
+                        });
+                    }
+                });
+            });
+        }
+
+        $('.datepicker').datepicker({ format: 'yyyy-mm-dd', autoclose: true, todayHighlight: true });
     }
-    
-    /**
-     * Update date filter inputs with current state
-     */
+
+    // =========================================================================
+    // DATE NAVIGATION
+    // =========================================================================
+
     function updateDateInputs() {
         $('#rb-date-from').val(formatDate(state.startDate));
         $('#rb-date-to').val(formatDate(state.endDate));
     }
-    
-    /**
-     * Apply custom date range from filter inputs
-     */
+
     function applyCustomDateRange() {
-        var fromVal = $('#rb-date-from').val();
-        var toVal = $('#rb-date-to').val();
-        
-        if (fromVal && toVal) {
-            state.startDate = new Date(fromVal);
-            state.endDate = new Date(toVal);
-            
-            // Validate dates
+        var from = $('#rb-date-from').val();
+        var to   = $('#rb-date-to').val();
+        if (from && to) {
+            state.startDate = new Date(from);
+            state.endDate   = new Date(to);
             if (state.startDate > state.endDate) {
-                alert_float('warning', 'Start date must be before end date');
+                alert_float('warning', 'Startdatum muss vor Enddatum liegen');
                 return;
             }
-            
             loadBoardData();
-        } else {
-            alert_float('warning', 'Please select both start and end dates');
         }
     }
-    
-    /**
-     * Load board data from API
-     */
-    function loadBoardData() {
-        if (state.isLoading) return;
-        
-        state.isLoading = true;
-        showLoading(true);
-        
-        var params = {
-            start_date: formatDate(state.startDate),
-            end_date: formatDate(state.endDate)
-        };
-        
-        $.ajax({
-            url: config.apiUrl + '/api_board_data',
-            type: 'GET',
-            data: params,
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    state.staff = response.data.staff || [];
-                    state.allocations = response.data.allocations || [];
-                    state.timeOff = response.data.time_off || [];
-                    state.projects = response.data.projects || [];
-                    state.capacity = response.data.capacity || {};
-                    
-                    renderBoard();
-                    checkOverbooking(); // Check and display overbooking warnings
-                } else {
-                    alert_float('danger', response.message || config.lang.errorLoading);
-                }
-            },
-            error: function() {
-                alert_float('danger', config.lang.errorLoading);
-            },
-            complete: function() {
-                state.isLoading = false;
-                showLoading(false);
-            }
-        });
-    }
-    
-    /**
-     * Render the complete board
-     */
-    function renderBoard() {
-        renderDateHeader();
-        renderStaffRows();
-        syncBoardWidth();
-        initDragDrop();
-    }
-    
-    /**
-     * Synchronize width between date header and staff rows
-     */
-    function syncBoardWidth() {
-        // Calculate total width based on number of dates and cell width
-        var dates = getDateRange(state.startDate, state.endDate, true);
-        var totalWidth = dates.length * state.cellWidth;
-        
-        // Set min-width on dates container
-        $datesContainer.css('min-width', totalWidth + 'px');
-        
-        // Set min-width on each timeline grid
-        $boardBody.find('.rb-timeline-grid').css('min-width', totalWidth + 'px');
-    }
-    
-    /**
-     * Render date header cells (including weekends)
-     */
-    function renderDateHeader() {
-        var html = '';
-        var dates = getDateRange(state.startDate, state.endDate, true); // Include weekends
-        var dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        var today = formatDate(new Date());
-        
-        dates.forEach(function(date) {
-            var d = new Date(date);
-            var isWeekend = d.getDay() === 0 || d.getDay() === 6;
-            var isToday = date === today;
-            
-            var classes = 'rb-date-cell';
-            if (isWeekend) classes += ' weekend';
-            if (isToday) classes += ' today';
-            
-            html += '<div class="' + classes + '" data-date="' + date + '">';
-            html += '<span class="rb-day-name">' + dayNames[d.getDay()] + '</span>';
-            html += '<span class="rb-day-num">' + d.getDate() + '</span>';
-            html += '</div>';
-        });
-        
-        $datesContainer.html(html);
-    }
-    
-    /**
-     * Render staff rows with allocations
-     */
-    function renderStaffRows() {
-        var html = '';
-        var filteredStaff = state.staff;
-        
-        // Apply staff filter
-        if (state.filterStaff) {
-            filteredStaff = state.staff.filter(function(s) {
-                return s.staffid == state.filterStaff;
-            });
-        }
-        
-        if (filteredStaff.length === 0) {
-            html = '<div class="rb-empty-state">';
-            html += '<i class="fa fa-users"></i>';
-            html += '<p>' + config.lang.noAllocations + '</p>';
-            html += '</div>';
-            $boardBody.html(html);
-            return;
-        }
-        
-        filteredStaff.forEach(function(staff) {
-            html += renderStaffRow(staff);
-        });
-        
-        $boardBody.html(html);
-    }
-    
-    /**
-     * Render single staff row
-     */
-    function renderStaffRow(staff) {
-        var initials = getInitials(staff.firstname, staff.lastname);
-        var dates = getDateRange(state.startDate, state.endDate, true); // Include weekends
-        var today = formatDate(new Date());
-        
-        // Get allocations for this staff
-        var staffAllocations = state.allocations.filter(function(a) {
-            return a.staff_id == staff.staffid;
-        });
-        
-        // Apply project filter
-        if (state.filterProject) {
-            staffAllocations = staffAllocations.filter(function(a) {
-                return a.project_id == state.filterProject;
-            });
-        }
-        
-        // Calculate total allocated hours in visible date range
-        var totalAllocatedHours = calculateStaffTotalHours(staffAllocations, dates);
-        
-        // Get time off for this staff
-        var staffTimeOff = state.timeOff.filter(function(t) {
-            return t.staff_id == staff.staffid;
-        });
-        
-        var html = '<div class="rb-staff-row" data-staff-id="' + staff.staffid + '">';
-        
-        // Staff column
-        html += '<div class="rb-staff-column">';
-        
-        // Avatar with profile image or initials
-        if (staff.profile_image) {
-            html += '<div class="rb-staff-avatar rb-has-image">';
-            html += '<img src="' + config.baseUrl + 'uploads/staff_profile_images/' + staff.staffid + '/thumb_' + staff.profile_image + '" alt="' + staff.firstname + '">';
-            html += '</div>';
-        } else {
-            html += '<div class="rb-staff-avatar" style="background-color:' + (staff.color || '#3498db') + '">' + initials + '</div>';
-        }
-        
-        // Calculate overall staff status for the visible period
-        var staffStatus = calculateStaffStatus(staff.staffid, totalAllocatedHours, staff.weekly_hours || 40);
-        
-        html += '<div class="rb-staff-info">';
-        html += '<div class="rb-staff-name">';
-        html += '<span class="rb-status-dot ' + staffStatus.class + '" title="' + staffStatus.title + '"></span>';
-        html += staff.firstname + ' ' + staff.lastname;
-        html += '</div>';
-        html += '<div class="rb-staff-capacity">' + (staff.weekly_hours || 40) + 'h/week</div>';
-        html += '<div class="rb-staff-allocated">' + totalAllocatedHours + 'h ' + config.lang.allocated + '</div>';
-        html += '</div>';
-        html += '</div>';
-        
-        // Timeline grid (including weekends)
-        html += '<div class="rb-timeline-grid">';
-        
-        dates.forEach(function(date) {
-            var d = new Date(date);
-            var isWeekend = d.getDay() === 0 || d.getDay() === 6;
-            var isToday = date === today;
-            
-            // Check capacity status for this day
-            var capacityStatus = getCapacityStatus(staff.staffid, date);
-            
-            var classes = 'rb-timeline-cell';
-            if (isWeekend) classes += ' weekend';
-            if (isToday) classes += ' today';
-            if (!isWeekend) {
-                if (capacityStatus === 'overbooked') classes += ' rb-overbooked';
-                else if (capacityStatus === 'warning') classes += ' rb-warning';
-                else if (capacityStatus === 'full') classes += ' rb-full';
-            }
-            
-            html += '<div class="' + classes + '" data-date="' + date + '"></div>';
-        });
-        
-        // Render allocations (split at weekends)
-        staffAllocations.forEach(function(alloc) {
-            html += renderAllocationSegments(alloc, dates);
-        });
-        
-        // Render time off
-        staffTimeOff.forEach(function(to) {
-            html += renderTimeOffSegments(to, dates);
-        });
-        
-        html += '</div>'; // .rb-timeline-grid
-        html += '</div>'; // .rb-staff-row
-        
-        return html;
-    }
-    
-    /**
-     * Render allocation as segments (split at weekends unless include_weekends is true)
-     * Creates separate visual bars for each consecutive working day period
-     */
-    function renderAllocationSegments(alloc, dates) {
-        var html = '';
-        var color = alloc.project_color || '#3498db';
-        var textColor = isLightColor(color) ? '#000' : '#fff';
-        var isOverbooked = checkAllocationOverbooking(alloc);
-        var includeWeekends = alloc.include_weekends == 1 || alloc.include_weekends === true;
-        
-        // Calculate total hours for this allocation
-        var workingDays = getDateRange(alloc.start_date, alloc.end_date, includeWeekends);
-        var hoursPerDay = parseFloat(alloc.hours_per_day) || 0;
-        var totalHours = workingDays.length * hoursPerDay;
-        
-        // Get all dates in the allocation range
-        var allocDates = getDateRange(alloc.start_date, alloc.end_date, true);
-        
-        // Find segments of consecutive days (respect include_weekends setting)
-        var segments = [];
-        var currentSegment = null;
-        
-        allocDates.forEach(function(dateStr) {
-            var d = new Date(dateStr);
-            var isWeekend = d.getDay() === 0 || d.getDay() === 6;
-            var isVisible = dates.indexOf(dateStr) !== -1;
-            
-            // Include this day if: (not weekend) OR (weekend AND include_weekends is true)
-            var includeDay = (!isWeekend || includeWeekends) && isVisible;
-            
-            if (includeDay) {
-                if (!currentSegment) {
-                    currentSegment = { start: dateStr, end: dateStr };
-                } else {
-                    currentSegment.end = dateStr;
-                }
-            } else {
-                // Weekend (without include_weekends) or not visible - close current segment
-                if (currentSegment) {
-                    segments.push(currentSegment);
-                    currentSegment = null;
-                }
-            }
-        });
-        
-        // Don't forget the last segment
-        if (currentSegment) {
-            segments.push(currentSegment);
-        }
-        
-        // Render each segment
-        segments.forEach(function(segment, index) {
-            var startIndex = dates.indexOf(segment.start);
-            var endIndex = dates.indexOf(segment.end);
-            
-            if (startIndex === -1 || endIndex === -1) return;
-            
-            var left = startIndex * state.cellWidth;
-            var width = (endIndex - startIndex + 1) * state.cellWidth - 4;
-            
-            var allocClasses = 'rb-allocation';
-            if (isOverbooked) allocClasses += ' rb-allocation-overbooked';
-            if (index === 0) allocClasses += ' rb-segment-first';
-            if (index === segments.length - 1) allocClasses += ' rb-segment-last';
-            if (segments.length > 1 && index > 0 && index < segments.length - 1) allocClasses += ' rb-segment-middle';
-            
-            html += '<div class="' + allocClasses + '" ';
-            html += 'data-id="' + alloc.id + '" ';
-            html += 'data-staff-id="' + alloc.staff_id + '" ';
-            html += 'data-start="' + alloc.start_date + '" ';
-            html += 'data-end="' + alloc.end_date + '" ';
-            html += 'data-segment="' + index + '" ';
-            html += 'style="left:' + left + 'px;width:' + width + 'px;';
-            html += 'background-color:' + color + ';color:' + textColor + '">';
-            
-            // Show content only on first segment (or if single segment)
-            if (index === 0) {
-                if (isOverbooked) {
-                    html += '<i class="fa fa-exclamation-triangle rb-overbooking-icon" title="Overbooking!"></i>';
-                }
-                html += '<div class="rb-allocation-title">' + (alloc.project_name || 'Internal') + '</div>';
-                html += '<div class="rb-allocation-hours">' + alloc.hours_per_day + 'h/day</div>';
-                html += '<div class="rb-allocation-total">' + totalHours + 'h total</div>';
-            }
-            
-            // Resize handles only on first and last segments
-            if (config.canEdit) {
-                if (index === 0) {
-                    html += '<div class="rb-resize-handle rb-resize-left"></div>';
-                }
-                if (index === segments.length - 1) {
-                    html += '<div class="rb-resize-handle rb-resize-right"></div>';
-                }
-            }
-            
-            html += '</div>';
-        });
-        
-        return html;
-    }
-    
-    /**
-     * Render time off as segments (split at weekends)
-     */
-    function renderTimeOffSegments(timeOff, dates) {
-        var html = '';
-        
-        // Get all dates in the time off range
-        var offDates = getDateRange(timeOff.start_date, timeOff.end_date, true);
-        
-        // Find segments of consecutive working days
-        var segments = [];
-        var currentSegment = null;
-        
-        offDates.forEach(function(dateStr) {
-            var d = new Date(dateStr);
-            var isWeekend = d.getDay() === 0 || d.getDay() === 6;
-            var isVisible = dates.indexOf(dateStr) !== -1;
-            
-            if (!isWeekend && isVisible) {
-                if (!currentSegment) {
-                    currentSegment = { start: dateStr, end: dateStr };
-                } else {
-                    currentSegment.end = dateStr;
-                }
-            } else {
-                if (currentSegment) {
-                    segments.push(currentSegment);
-                    currentSegment = null;
-                }
-            }
-        });
-        
-        if (currentSegment) {
-            segments.push(currentSegment);
-        }
-        
-        // Render each segment
-        segments.forEach(function(segment, index) {
-            var startIndex = dates.indexOf(segment.start);
-            var endIndex = dates.indexOf(segment.end);
-            
-            if (startIndex === -1 || endIndex === -1) return;
-            
-            var left = startIndex * state.cellWidth;
-            var width = (endIndex - startIndex + 1) * state.cellWidth - 4;
-            
-            html += '<div class="rb-allocation rb-time-off ' + timeOff.type + '" ';
-            html += 'data-timeoff-id="' + timeOff.id + '" ';
-            html += 'style="left:' + left + 'px;width:' + width + 'px">';
-            
-            if (index === 0) {
-                html += '<div class="rb-allocation-title">' + capitalizeFirst(timeOff.type) + '</div>';
-            }
-            
-            html += '</div>';
-        });
-        
-        return html;
-    }
-    
-    /**
-     * Initialize interact.js drag and drop
-     */
-    function initDragDrop() {
-        if (!config.canEdit) {
-            return;
-        }
-        
-        // Check if interact.js is loaded
-        if (typeof interact === 'undefined') {
-            return;
-        }
-        
-        // Unset any existing interactions first
-        interact('.rb-allocation:not(.rb-time-off)').unset();
-        
-        // Make allocations draggable and resizable
-        interact('.rb-allocation:not(.rb-time-off)')
-            .draggable({
-                inertia: false,
-                autoScroll: true,
-                modifiers: [
-                    interact.modifiers.restrictRect({
-                        restriction: '.rb-board-body',
-                        endOnly: true
-                    })
-                ],
-                listeners: {
-                    start: function(event) {
-                        $(event.target).addClass('rb-dragging');
-                    },
-                    move: function(event) {
-                        var target = event.target;
-                        var x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
-                        var y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
-                        
-                        target.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
-                        target.setAttribute('data-x', x);
-                        target.setAttribute('data-y', y);
-                    },
-                    end: function(event) {
-                        var $target = $(event.target);
-                        $target.removeClass('rb-dragging');
-                        
-                        var x = parseFloat(event.target.getAttribute('data-x')) || 0;
-                        var y = parseFloat(event.target.getAttribute('data-y')) || 0;
-                        
-                        // Calculate new date and staff
-                        var daysMoved = Math.round(x / state.cellWidth);
-                        var rowsMoved = Math.round(y / 60); // Approximate row height
-                        
-                        if (daysMoved !== 0 || rowsMoved !== 0) {
-                            var id = $target.data('id');
-                            moveAllocation(id, daysMoved, rowsMoved);
-                        } else {
-                            // Reset position
-                            event.target.style.transform = '';
-                            event.target.removeAttribute('data-x');
-                            event.target.removeAttribute('data-y');
-                        }
-                    }
-                }
-            })
-            .resizable({
-                edges: { 
-                    left: '.rb-resize-left', 
-                    right: '.rb-resize-right',
-                    top: false,
-                    bottom: false
-                },
-                listeners: {
-                    start: function(event) {
-                        // Resize started
-                    },
-                    move: function(event) {
-                        var target = event.target;
-                        var x = parseFloat(target.getAttribute('data-x')) || 0;
-                        
-                        // Update width
-                        target.style.width = event.rect.width + 'px';
-                        
-                        // Translate when resizing from left edge
-                        x += event.deltaRect.left;
-                        target.style.transform = 'translateX(' + x + 'px)';
-                        target.setAttribute('data-x', x);
-                    },
-                    end: function(event) {
-                        var $target = $(event.target);
-                        var id = $target.data('id');
-                        
-                        // Calculate new dates based on position and width changes
-                        var x = parseFloat(event.target.getAttribute('data-x')) || 0;
-                        var originalLeft = parseFloat($target.css('left')) || 0;
-                        var newWidth = event.rect.width;
-                        
-                        // Days moved from start
-                        var startDaysDelta = Math.round(x / state.cellWidth);
-                        // New duration in days
-                        var newDurationDays = Math.round(newWidth / state.cellWidth);
-                        
-                        resizeAllocation(id, startDaysDelta, newDurationDays);
-                    }
-                }
-            });
-    }
-    
-    /**
-     * Move allocation via API
-     */
-    function moveAllocation(id, daysDelta, staffDelta) {
-        var alloc = state.allocations.find(function(a) { return a.id == id; });
-        if (!alloc) return;
-        
-        // Calculate new dates
-        var newStart = addDays(new Date(alloc.start_date), daysDelta);
-        var newEnd = addDays(new Date(alloc.end_date), daysDelta);
-        
-        // Calculate new staff (if moved vertically)
-        var newStaffId = alloc.staff_id;
-        if (staffDelta !== 0) {
-            var currentIndex = state.staff.findIndex(function(s) { return s.staffid == alloc.staff_id; });
-            var newIndex = currentIndex + staffDelta;
-            if (newIndex >= 0 && newIndex < state.staff.length) {
-                newStaffId = state.staff[newIndex].staffid;
-            }
-        }
-        
-        $.ajax({
-            url: config.apiUrl + '/api_allocation_move/' + id,
-            type: 'POST',
-            data: {
-                csrf_token_name: config.csrfToken,
-                start_date: formatDate(newStart),
-                end_date: formatDate(newEnd),
-                staff_id: newStaffId
-            },
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    if (response.warning) {
-                        alert_float('warning', response.warning);
-                    } else {
-                        alert_float('success', config.lang.allocationMoved || 'Moved');
-                    }
-                    loadBoardData(); // Reload to get updated positions
-                } else {
-                    alert_float('danger', response.message);
-                    loadBoardData(); // Reset
-                }
-            },
-            error: function() {
-                alert_float('danger', config.lang.errorSaving);
-                loadBoardData();
-            }
-        });
-    }
-    
-    /**
-     * Resize allocation via API
-     * @param {number} id - Allocation ID
-     * @param {number} startDaysDelta - Days to shift start date (negative = earlier, positive = later)
-     * @param {number} newDurationDays - New total duration in days
-     */
-    function resizeAllocation(id, startDaysDelta, newDurationDays) {
-        var alloc = state.allocations.find(function(a) { return a.id == id; });
-        if (!alloc) {
-            loadBoardData();
-            return;
-        }
-        
-        // Calculate new dates
-        var originalStart = new Date(alloc.start_date);
-        var newStart = addDays(originalStart, startDaysDelta);
-        var newEnd = addDays(newStart, newDurationDays - 1); // -1 because duration includes start day
-        
-        $.ajax({
-            url: config.apiUrl + '/api_allocation/' + id,
-            type: 'POST', // Use POST with _method for better compatibility
-            data: {
-                _method: 'PUT',
-                start_date: formatDate(newStart),
-                end_date: formatDate(newEnd)
-            },
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    alert_float('success', 'Updated');
-                    loadBoardData();
-                } else {
-                    alert_float('danger', response.message || 'Error updating');
-                    loadBoardData();
-                }
-            },
-            error: function(xhr) {
-                alert_float('danger', config.lang.errorSaving);
-                loadBoardData();
-            }
-        });
-    }
-    
-    /**
-     * Open allocation modal for create/edit
-     */
-    function openAllocationModal(id, staffId, date) {
-        var $modal = $('#rb-allocation-modal');
-        var $form = $('#rb-allocation-form');
-        var $title = $('#rb-modal-title');
-        var $deleteBtn = $('#rb-delete-allocation');
-        
-        $form[0].reset();
-        $('#rb-overbooking-warning').hide();
-        $('#rb-alloc-weekends').prop('checked', false); // Default: no weekends
-        
-        if (id) {
-            // Edit mode
-            var alloc = state.allocations.find(function(a) { return a.id == id; });
-            if (!alloc) return;
-            
-            $title.text('Edit Allocation');
-            $('#rb-alloc-id').val(alloc.id);
-            $('#rb-alloc-staff').selectpicker('val', alloc.staff_id);
-            $('#rb-alloc-project').selectpicker('val', alloc.project_id || '');
-            $('#rb-alloc-start').val(alloc.start_date);
-            $('#rb-alloc-end').val(alloc.end_date);
-            $('#rb-alloc-hours').val(alloc.hours_per_day);
-            $('#rb-alloc-weekends').prop('checked', alloc.include_weekends == 1 || alloc.include_weekends === '1');
-            $('#rb-alloc-note').val(alloc.note || '');
-            
-            $deleteBtn.show();
-        } else {
-            // Create mode
-            $title.text('New Allocation');
-            $('#rb-alloc-id').val('');
-            $deleteBtn.hide();
-            
-            if (staffId) {
-                $('#rb-alloc-staff').selectpicker('val', staffId);
-            }
-            if (date) {
-                $('#rb-alloc-start').val(date);
-                $('#rb-alloc-end').val(date);
-            }
-        }
-        
-        $('.selectpicker').selectpicker('refresh');
-        updateTotalHoursDisplay();
-        $modal.modal('show');
-    }
-    
-    /**
-     * Save allocation (create or update)
-     */
-    function saveAllocation() {
-        var $form = $('#rb-allocation-form');
-        var id = $('#rb-alloc-id').val();
-        
-        var data = {
-            staff_id: $('#rb-alloc-staff').val(),
-            project_id: $('#rb-alloc-project').val() || null,
-            start_date: $('#rb-alloc-start').val(),
-            end_date: $('#rb-alloc-end').val(),
-            hours_per_day: $('#rb-alloc-hours').val(),
-            include_weekends: $('#rb-alloc-weekends').is(':checked') ? 1 : 0,
-            note: $('#rb-alloc-note').val()
-        };
-        
-        // Validation
-        if (!data.staff_id) {
-            alert_float('warning', 'Please select a staff member');
-            return;
-        }
-        if (!data.start_date || !data.end_date) {
-            alert_float('warning', 'Please select dates');
-            return;
-        }
-        
-        var url = config.apiUrl + '/api_allocations';
-        var method = 'POST';
-        
-        if (id) {
-            url = config.apiUrl + '/api_allocation/' + id;
-            // Use POST with _method override for better compatibility
-            data._method = 'PUT';
-        }
-        
-        $.ajax({
-            url: url,
-            type: 'POST',
-            data: data,
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    $('#rb-allocation-modal').modal('hide');
-                    if (response.warning) {
-                        alert_float('warning', response.warning);
-                    } else {
-                        alert_float('success', id ? 'Updated' : 'Created');
-                    }
-                    loadBoardData();
-                } else {
-                    alert_float('danger', response.message || config.lang.errorSaving);
-                }
-            },
-            error: function() {
-                alert_float('danger', config.lang.errorSaving);
-            }
-        });
-    }
-    
-    /**
-     * Delete allocation
-     */
-    function deleteAllocation() {
-        var id = $('#rb-alloc-id').val();
-        if (!id) return;
-        
-        if (!confirm(config.lang.confirmDelete)) return;
-        
-        $.ajax({
-            url: config.apiUrl + '/api_allocation/' + id,
-            type: 'DELETE',
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    $('#rb-allocation-modal').modal('hide');
-                    alert_float('success', 'Deleted');
-                    loadBoardData();
-                } else {
-                    alert_float('danger', response.message);
-                }
-            },
-            error: function() {
-                alert_float('danger', 'Error deleting');
-            }
-        });
-    }
-    
-    /**
-     * Save time off request
-     */
-    function saveTimeOff() {
-        var data = {
-            staff_id: $('#rb-timeoff-staff').val(),
-            type: $('#rb-timeoff-type').val(),
-            start_date: $('#rb-timeoff-start').val(),
-            end_date: $('#rb-timeoff-end').val(),
-            note: $('#rb-timeoff-note').val()
-        };
-        
-        $.ajax({
-            url: config.apiUrl + '/api_time_off',
-            type: 'POST',
-            data: data,
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    $('#rb-timeoff-modal').modal('hide');
-                    alert_float('success', 'Time off requested');
-                    loadBoardData();
-                } else {
-                    alert_float('danger', response.message);
-                }
-            },
-            error: function() {
-                alert_float('danger', 'Error saving');
-            }
-        });
-    }
-    
-    /**
-     * Update total hours display in modal
-     */
-    function updateTotalHoursDisplay() {
-        var start = $('#rb-alloc-start').val();
-        var end = $('#rb-alloc-end').val();
-        var hoursPerDay = parseFloat($('#rb-alloc-hours').val()) || 0;
-        
-        if (start && end && hoursPerDay > 0) {
-            var days = countWorkingDays(new Date(start), new Date(end));
-            var total = days * hoursPerDay;
-            $('#rb-total-hours-display').text(days + ' working days × ' + hoursPerDay + 'h = ' + total + ' hours total');
-        } else {
-            $('#rb-total-hours-display').text('');
-        }
-    }
-    
-    /**
-     * Navigation: Previous period
-     */
+
     function navigatePrev() {
         if (state.currentView === 'month') {
             state.startDate.setMonth(state.startDate.getMonth() - 1);
@@ -974,10 +213,7 @@ var PlanningBoard = (function() {
         updateDateInputs();
         loadBoardData();
     }
-    
-    /**
-     * Navigation: Next period
-     */
+
     function navigateNext() {
         if (state.currentView === 'month') {
             state.startDate.setMonth(state.startDate.getMonth() + 1);
@@ -989,284 +225,793 @@ var PlanningBoard = (function() {
         updateDateInputs();
         loadBoardData();
     }
-    
-    /**
-     * Navigation: Today
-     */
+
     function navigateToday() {
         var today = new Date();
         if (state.currentView === 'month') {
             state.startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-            state.endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            state.endDate   = new Date(today.getFullYear(), today.getMonth() + 1, 0);
         } else {
-            var day = today.getDay();
+            var day  = today.getDay();
             var diff = today.getDate() - day + (day === 0 ? -6 : 1);
-            state.startDate = new Date(today.setDate(diff));
-            state.endDate = new Date(state.startDate);
+            state.startDate = new Date(today);
+            state.startDate.setDate(diff);
+            state.endDate   = new Date(state.startDate);
             state.endDate.setDate(state.endDate.getDate() + 6);
         }
         updateDateInputs();
         loadBoardData();
     }
-    
-    /**
-     * Change view mode
-     */
+
     function changeView(view) {
         if (view === state.currentView) return;
-        
         state.currentView = view;
         $('.rb-view-btn').removeClass('active');
         $('.rb-view-btn[data-view="' + view + '"]').addClass('active');
-        
-        // Adjust date range
-        var today = new Date();
-        if (view === 'month') {
-            state.startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-            state.endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        } else {
-            var day = today.getDay();
-            var diff = today.getDate() - day + (day === 0 ? -6 : 1);
-            state.startDate = new Date(today);
-            state.startDate.setDate(diff);
-            state.endDate = new Date(state.startDate);
-            state.endDate.setDate(state.endDate.getDate() + 6);
-        }
-        
-        loadBoardData();
+        navigateToday();
     }
-    
-    /**
-     * Show/hide loading indicator
-     */
-    function showLoading(show) {
-        if (show) {
-            $('#rb-loading').removeClass('hidden');
-        } else {
-            $('#rb-loading').addClass('hidden');
-        }
-    }
-    
-    // ===== UTILITY FUNCTIONS =====
-    
-    function formatDate(date) {
-        var d = new Date(date);
-        var month = '' + (d.getMonth() + 1);
-        var day = '' + d.getDate();
-        var year = d.getFullYear();
-        
-        if (month.length < 2) month = '0' + month;
-        if (day.length < 2) day = '0' + day;
-        
-        return [year, month, day].join('-');
-    }
-    
-    function getDateRange(start, end, includeWeekends) {
-        var dates = [];
-        var current = new Date(start);
-        var endDate = new Date(end);
-        
-        while (current <= endDate) {
-            var day = current.getDay();
-            // Skip weekends unless explicitly included
-            if (includeWeekends || (day !== 0 && day !== 6)) {
-                dates.push(formatDate(current));
+
+    // =========================================================================
+    // DATA LOADING
+    // =========================================================================
+
+    function loadBoardData() {
+        if (state.isLoading) return;
+        state.isLoading = true;
+        showLoading(true);
+
+        $.ajax({
+            url:      config.apiUrl + '/api_board_data',
+            type:     'GET',
+            data:     { start_date: formatDate(state.startDate), end_date: formatDate(state.endDate) },
+            dataType: 'json',
+            success: function (response) {
+                if (response.success) {
+                    state.staff       = response.data.staff       || [];
+                    state.allocations = response.data.allocations || [];
+                    state.timeOff     = response.data.time_off    || [];
+                    state.projects    = response.data.projects    || [];
+                    state.capacity    = response.data.capacity    || {};
+                    renderBoard();
+                    checkOverbooking();
+                } else {
+                    alert_float('danger', response.message || config.lang.errorLoading || 'Fehler');
+                }
+            },
+            error: function () {
+                alert_float('danger', config.lang.errorLoading || 'Fehler beim Laden');
+            },
+            complete: function () {
+                state.isLoading = false;
+                showLoading(false);
             }
-            current.setDate(current.getDate() + 1);
+        });
+    }
+
+    function showLoading(show) {
+        $('#rb-loading').toggleClass('hidden', !show);
+    }
+
+    // =========================================================================
+    // BOARD RENDERING
+    // =========================================================================
+
+    function renderBoard() {
+        renderDateHeader();
+        renderStaffGroups();
+        syncBoardWidth();
+        if (config.canEdit) initDragDrop();
+    }
+
+    function syncBoardWidth() {
+        var dates = getDateRange(state.startDate, state.endDate, true);
+        var w     = dates.length * state.cellWidth;
+        $datesContainer.css('min-width', w + 'px');
+        $boardBody.find('.rb-timeline-grid, .rb-lane').css('min-width', w + 'px');
+    }
+
+    // -------------------------------------------------------------------------
+    // DATE HEADER
+    // -------------------------------------------------------------------------
+
+    function renderDateHeader() {
+        var html     = '';
+        var dates    = getDateRange(state.startDate, state.endDate, true);
+        var dayNames = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+        var today    = formatDate(new Date());
+
+        // Month labels
+        var months = {}, monthOrder = [];
+        dates.forEach(function (d) {
+            var k = d.substr(0, 7);
+            if (!months[k]) {
+                months[k] = 0;
+                monthOrder.push(k);
+                var parts = d.split('-');
+                var dt    = new Date(+parts[0], +parts[1] - 1, 1);
+                months[k + '_label'] = dt.toLocaleString('de-DE', { month: 'long', year: 'numeric' });
+            }
+            months[k]++;
+        });
+
+        html += '<div class="rb-month-row">';
+        monthOrder.forEach(function (k) {
+            html += '<div class="rb-month-cell" style="width:' + (months[k] * state.cellWidth) + 'px">' + months[k + '_label'] + '</div>';
+        });
+        html += '</div><div class="rb-day-row">';
+
+        dates.forEach(function (date) {
+            var d         = new Date(date + 'T00:00:00');
+            var isWeekend = d.getDay() === 0 || d.getDay() === 6;
+            var isToday   = date === today;
+            var cls       = 'rb-date-cell' + (isWeekend ? ' weekend' : '') + (isToday ? ' today' : '');
+            html += '<div class="' + cls + '" data-date="' + date + '" style="width:' + state.cellWidth + 'px">';
+            html += '<span class="rb-day-name">' + dayNames[d.getDay()] + '</span>';
+            html += '<span class="rb-day-num">' + d.getDate() + '</span>';
+            html += '</div>';
+        });
+        html += '</div>';
+
+        $datesContainer.html(html);
+    }
+
+    // -------------------------------------------------------------------------
+    // STAFF GROUPS
+    // -------------------------------------------------------------------------
+
+    function renderStaffGroups() {
+        var html = '';
+        var list = state.staff;
+
+        if (state.filterStaff) {
+            list = list.filter(function (s) { return String(s.staffid) === String(state.filterStaff); });
         }
-        
-        return dates;
-    }
-    
-    function addDays(date, days) {
-        var result = new Date(date);
-        result.setDate(result.getDate() + days);
-        return result;
-    }
-    
-    function countWorkingDays(start, end) {
-        var count = 0;
-        var current = new Date(start);
-        
-        while (current <= end) {
-            var day = current.getDay();
-            if (day !== 0 && day !== 6) count++;
-            current.setDate(current.getDate() + 1);
+
+        if (!list.length) {
+            $boardBody.html('<div class="rb-empty-state"><i class="fa fa-users fa-2x"></i><p>' + (config.lang.noAllocations || 'Keine Mitarbeiter') + '</p></div>');
+            return;
         }
-        
-        return count;
+
+        list.forEach(function (s) { html += renderStaffGroup(s); });
+        $boardBody.html(html);
     }
-    
-    /**
-     * Calculate total allocated hours for a staff member in visible date range
-     */
-    function calculateStaffTotalHours(allocations, visibleDates) {
-        var totalHours = 0;
-        
-        allocations.forEach(function(alloc) {
-            var allocDates = getDateRange(alloc.start_date, alloc.end_date, false); // Working days only
-            var hoursPerDay = parseFloat(alloc.hours_per_day) || 0;
-            
-            // Count only days that are in the visible range
-            allocDates.forEach(function(date) {
-                if (visibleDates.indexOf(date) !== -1) {
-                    totalHours += hoursPerDay;
+
+    function renderStaffGroup(staff) {
+        var staffId     = staff.staffid;
+        var isOwn       = config.isEmployee && String(staffId) === String(config.ownStaffId);
+        var isCollapsed = !!state.collapsedStaff[staffId];
+
+        var allocs = state.allocations.filter(function (a) { return String(a.staff_id) === String(staffId); });
+        if (state.filterProject) {
+            allocs = allocs.filter(function (a) { return String(a.project_id) === String(state.filterProject); });
+        }
+
+        var projAllocs = allocs.filter(function (a) { return a.type === 'project'; })
+            .sort(function (a, b) { return a.start_date > b.start_date ? 1 : -1; });
+        var taskAllocs = allocs.filter(function (a) { return a.type === 'task'; })
+            .sort(function (a, b) { return a.start_date > b.start_date ? 1 : -1; });
+
+        var projLanes = packAllocationsIntoLanes(projAllocs);
+        var taskLanes = packAllocationsIntoLanes(taskAllocs);
+
+        var timeOffList = state.timeOff.filter(function (t) { return String(t.staff_id) === String(staffId); });
+
+        var dates       = getDateRange(state.startDate, state.endDate, false);
+        var totalH      = calculateStaffTotalHours(allocs, dates);
+        var utilPct     = calcUtilizationPercent(staffId, totalH);
+
+        var groupCls = 'rb-staff-group' + (isCollapsed ? ' rb-collapsed' : '') + (isOwn ? ' rb-own-row' : '');
+
+        var html = '<div class="' + groupCls + '" data-staff-id="' + staffId + '">';
+
+        // Staff header row
+        html += '<div class="rb-staff-header">';
+        html += '<span class="rb-staff-toggle"><i class="fa fa-chevron-' + (isCollapsed ? 'right' : 'down') + '"></i></span>';
+        html += renderAvatar(staff);
+        html += '<div class="rb-staff-info">';
+        html += '<div class="rb-staff-name">' + escHtml(staff.firstname + ' ' + staff.lastname);
+        if (isOwn) html += ' <span class="label label-info" style="font-size:10px">Ich</span>';
+        html += '</div>';
+        html += '<div class="rb-staff-util ' + utilClass(utilPct) + '">' + utilPct + '% &bull; ' + totalH + 'h</div>';
+        html += '</div>';
+
+        // Header timeline cells (greyed background)
+        html += '<div class="rb-timeline-grid rb-header-timeline">';
+        html += renderLaneCells(staffId, true);
+        html += '</div>';
+
+        html += '</div>'; // .rb-staff-header
+
+        // Collapsible lanes
+        html += '<div class="rb-lanes-wrapper">';
+
+        if (timeOffList.length) {
+            html += '<div class="rb-lane rb-timeoff-lane">';
+            html += renderLaneCells(staffId, false);
+            timeOffList.forEach(function (to) { html += renderTimeOffBar(to); });
+            html += '</div>';
+        }
+
+        projLanes.forEach(function (lane, li) {
+            html += '<div class="rb-lane rb-project-lane" data-lane="' + li + '">';
+            html += renderLaneCells(staffId, false);
+            lane.forEach(function (a) { html += renderAllocationBar(a); });
+            html += '</div>';
+        });
+
+        taskLanes.forEach(function (lane, li) {
+            html += '<div class="rb-lane rb-task-lane" data-lane="' + li + '">';
+            html += renderLaneCells(staffId, false);
+            lane.forEach(function (a) { html += renderAllocationBar(a); });
+            html += '</div>';
+        });
+
+        if (!projLanes.length && !taskLanes.length) {
+            html += '<div class="rb-lane rb-empty-lane">';
+            html += renderLaneCells(staffId, false);
+            html += '</div>';
+        }
+
+        html += '</div>'; // .rb-lanes-wrapper
+        html += '</div>'; // .rb-staff-group
+
+        return html;
+    }
+
+    function renderLaneCells(staffId, isHeader) {
+        var html  = '';
+        var dates = getDateRange(state.startDate, state.endDate, true);
+        var today = formatDate(new Date());
+
+        dates.forEach(function (date) {
+            var d         = new Date(date + 'T00:00:00');
+            var isWeekend = d.getDay() === 0 || d.getDay() === 6;
+            var isToday   = date === today;
+            var cls       = 'rb-lane-cell' + (isWeekend ? ' weekend' : '') + (isToday ? ' today' : '');
+
+            if (!isHeader && !isWeekend && staffId) {
+                var capStatus = getCapacityStatus(staffId, date);
+                if (capStatus === 'overbooked') cls += ' rb-cell-over';
+                else if (capStatus === 'full')   cls += ' rb-cell-full';
+                else if (capStatus === 'warning') cls += ' rb-cell-warn';
+            }
+
+            html += '<div class="' + cls + '" data-date="' + date + '" style="width:' + state.cellWidth + 'px"></div>';
+        });
+        return html;
+    }
+
+    function renderAvatar(staff) {
+        var initials = getInitials(staff.firstname, staff.lastname);
+        if (staff.profile_image) {
+            return '<div class="rb-staff-avatar rb-has-image"><img src="' + config.baseUrl + 'uploads/staff_profile_images/' + staff.staffid + '/thumb_' + staff.profile_image + '" alt="' + escHtml(staff.firstname) + '"></div>';
+        }
+        return '<div class="rb-staff-avatar">' + escHtml(initials) + '</div>';
+    }
+
+    // =========================================================================
+    // LANE PACKING
+    // =========================================================================
+
+    function packAllocationsIntoLanes(allocations) {
+        var lanes = [];
+        allocations.forEach(function (alloc) {
+            var startD  = new Date((alloc.start_date || '1970-01-01') + 'T00:00:00');
+            var placed  = false;
+            for (var i = 0; i < lanes.length; i++) {
+                var last    = lanes[i][lanes[i].length - 1];
+                var lastEnd = new Date((last.end_date || '1970-01-01') + 'T00:00:00');
+                if (startD > lastEnd) {
+                    lanes[i].push(alloc);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) lanes.push([alloc]);
+        });
+        return lanes;
+    }
+
+    // =========================================================================
+    // BAR RENDERING
+    // =========================================================================
+
+    function renderAllocationBar(alloc) {
+        var dates    = getDateRange(state.startDate, state.endDate, true);
+        var visStart = formatDate(state.startDate);
+        var visEnd   = formatDate(state.endDate);
+
+        var sd = alloc.start_date < visStart ? visStart : alloc.start_date;
+        var ed = alloc.end_date   > visEnd   ? visEnd   : alloc.end_date;
+        if (ed < visStart || sd > visEnd) return '';
+
+        var si = -1, ei = -1;
+        for (var x = 0; x < dates.length; x++) {
+            if (si === -1 && dates[x] >= sd) si = x;
+            if (dates[x] <= ed) ei = x;
+        }
+        if (si === -1 || ei === -1 || ei < si) return '';
+
+        var left  = si * state.cellWidth;
+        var width = (ei - si + 1) * state.cellWidth - 4;
+
+        var isTask    = alloc.type === 'task';
+        var color     = alloc.project_color || (isTask ? '#5ba3d9' : '#3498db');
+        var textColor = isLightColor(color) ? '#222' : '#fff';
+        var isOver    = checkAllocationOverbooking(alloc);
+
+        var rawId       = alloc.id;
+        var isNumericId = typeof rawId === 'number' || /^\d+$/.test(String(rawId));
+
+        var hoursLabel = isTask
+            ? (alloc.daily_avg ? alloc.daily_avg + 'h/d' : (alloc.estimated_hours ? alloc.estimated_hours + 'h' : ''))
+            : (alloc.hours_per_day ? alloc.hours_per_day + 'h/d' : '');
+
+        var barLabel = isTask ? (alloc.task_name || 'Task') : (alloc.project_name || 'Projekt');
+        var tooltip  = escHtml(barLabel + (hoursLabel ? ' · ' + hoursLabel : '') + (alloc.note ? ' — ' + alloc.note : ''));
+
+        var cls = 'rb-allocation ' + (isTask ? 'rb-task-bar' : 'rb-project-bar');
+        if (isOver) cls += ' rb-allocation-overbooked';
+
+        var html = '<div class="' + cls + '" ';
+        html += 'data-id="' + rawId + '" ';
+        html += 'data-type="' + alloc.type + '" ';
+        html += 'data-staff-id="' + alloc.staff_id + '" ';
+        html += 'data-project-id="' + (alloc.project_id || '') + '" ';
+        html += 'data-task-id="' + (alloc.task_id || '') + '" ';
+        html += 'data-start="' + alloc.start_date + '" ';
+        html += 'data-end="' + alloc.end_date + '" ';
+        html += 'title="' + tooltip + '" ';
+        html += 'style="left:' + left + 'px;width:' + width + 'px;background-color:' + color + ';color:' + textColor + '">';
+
+        if (isOver) html += '<i class="fa fa-exclamation-triangle rb-overbooking-icon"></i> ';
+
+        if (width > 20) {
+            html += '<span class="rb-bar-label">' + escHtml(width > 60 ? barLabel : '') + '</span>';
+        }
+        if (hoursLabel && width > 80) {
+            if (isTask && alloc.estimated_hours && config.canEdit) {
+                html += '<span class="rb-bar-hours rb-inline-editable" data-task-id="' + alloc.task_id + '" data-hours="' + (alloc.estimated_hours || '') + '">' + hoursLabel + '</span>';
+            } else {
+                html += '<span class="rb-bar-hours">' + hoursLabel + '</span>';
+            }
+        }
+
+        if (config.canEdit && isNumericId) {
+            html += '<div class="rb-resize-handle rb-resize-left"></div>';
+            html += '<div class="rb-resize-handle rb-resize-right"></div>';
+        }
+
+        html += '</div>';
+        return html;
+    }
+
+    function renderTimeOffBar(to) {
+        var dates    = getDateRange(state.startDate, state.endDate, true);
+        var visStart = formatDate(state.startDate);
+        var visEnd   = formatDate(state.endDate);
+        var sd       = to.start_date || to.date_from;
+        var ed       = to.end_date   || to.date_to;
+        if (!sd || !ed || ed < visStart || sd > visEnd) return '';
+
+        sd = sd < visStart ? visStart : sd;
+        ed = ed > visEnd   ? visEnd   : ed;
+
+        var si = -1, ei = -1;
+        for (var x = 0; x < dates.length; x++) {
+            if (si === -1 && dates[x] >= sd) si = x;
+            if (dates[x] <= ed) ei = x;
+        }
+        if (si === -1 || ei === -1) return '';
+
+        var left  = si * state.cellWidth;
+        var width = (ei - si + 1) * state.cellWidth - 2;
+        var type  = to.type || 'vacation';
+        var label = { vacation: 'Urlaub', sick: 'Krank', holiday: 'Feiertag', other: 'Abwesend' }[type] || capitalizeFirst(type);
+
+        return '<div class="rb-allocation rb-time-off rb-timeoff-' + escHtml(type) + '" ' +
+               'title="' + label + ': ' + sd + ' – ' + ed + '" ' +
+               'style="left:' + left + 'px;width:' + width + 'px">' +
+               (width > 50 ? '<span class="rb-bar-label">' + label + '</span>' : '') +
+               '</div>';
+    }
+
+    // =========================================================================
+    // DRAG & DROP
+    // =========================================================================
+
+    function initDragDrop() {
+        if (!config.canEdit || typeof interact === 'undefined') return;
+
+        try { interact('.rb-project-bar, .rb-task-bar').unset(); } catch(e) {}
+
+        interact('.rb-project-bar, .rb-task-bar')
+            .draggable({
+                inertia:    false,
+                autoScroll: true,
+                modifiers:  [interact.modifiers.restrictRect({ restriction: '.rb-board-body', endOnly: true })],
+                listeners: {
+                    start: function (e) { $(e.target).addClass('rb-dragging'); },
+                    move:  function (e) {
+                        var t = e.target;
+                        var x = (parseFloat(t.getAttribute('data-x')) || 0) + e.dx;
+                        var y = (parseFloat(t.getAttribute('data-y')) || 0) + e.dy;
+                        t.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+                        t.setAttribute('data-x', x); t.setAttribute('data-y', y);
+                    },
+                    end: function (e) {
+                        var $t = $(e.target);
+                        $t.removeClass('rb-dragging');
+                        var x = parseFloat(e.target.getAttribute('data-x')) || 0;
+                        var y = parseFloat(e.target.getAttribute('data-y')) || 0;
+                        var days = Math.round(x / state.cellWidth);
+                        var rows = Math.round(y / 46);
+                        var rawId = $t.data('id');
+                        if ((days || rows) && typeof rawId === 'number') {
+                            moveAllocation(rawId, days, rows);
+                        } else {
+                            e.target.style.transform = '';
+                            e.target.removeAttribute('data-x');
+                            e.target.removeAttribute('data-y');
+                        }
+                    }
+                }
+            })
+            .resizable({
+                edges: { left: '.rb-resize-left', right: '.rb-resize-right', top: false, bottom: false },
+                listeners: {
+                    move: function (e) {
+                        var t = e.target;
+                        var x = parseFloat(t.getAttribute('data-x')) || 0;
+                        t.style.width = e.rect.width + 'px';
+                        x += e.deltaRect.left;
+                        t.style.transform = 'translateX(' + x + 'px)';
+                        t.setAttribute('data-x', x);
+                    },
+                    end: function (e) {
+                        var id  = $(e.target).data('id');
+                        var x   = parseFloat(e.target.getAttribute('data-x')) || 0;
+                        resizeAllocation(id, Math.round(x / state.cellWidth), Math.round(e.rect.width / state.cellWidth));
+                    }
                 }
             });
+    }
+
+    function moveAllocation(id, daysDelta, staffDelta) {
+        var alloc = state.allocations.find(function (a) { return a.id == id; });
+        if (!alloc) return;
+        var newStart   = addDays(new Date(alloc.start_date), daysDelta);
+        var newEnd     = addDays(new Date(alloc.end_date),   daysDelta);
+        var newStaffId = alloc.staff_id;
+        if (staffDelta) {
+            var idx = state.staff.findIndex(function (s) { return s.staffid == alloc.staff_id; });
+            var ni  = idx + staffDelta;
+            if (ni >= 0 && ni < state.staff.length) newStaffId = state.staff[ni].staffid;
+        }
+        $.ajax({
+            url: config.apiUrl + '/api_upsert_override', type: 'POST',
+            data: { staff_id: newStaffId, project_id: alloc.project_id, task_id: alloc.task_id,
+                    date_from: formatDate(newStart), date_to: formatDate(newEnd),
+                    hours_per_day: alloc.hours_per_day, color: alloc.project_color, note: alloc.note },
+            dataType: 'json',
+            success: function (r) { if (r.success) alert_float('success', 'Verschoben'); loadBoardData(); },
+            error:   function () { loadBoardData(); }
         });
-        
-        return Math.round(totalHours * 10) / 10; // Round to 1 decimal
     }
-    
-    /**
-     * Calculate staff status based on workload for the visible period
-     * Returns object with class and title for the status dot
-     */
-    function calculateStaffStatus(staffId, allocatedHours, weeklyCapacity) {
-        // Count visible working days
-        var dates = getDateRange(state.startDate, state.endDate, false);
-        var workingDays = dates.filter(function(date) {
-            var d = new Date(date);
-            return d.getDay() !== 0 && d.getDay() !== 6;
-        }).length;
-        
-        // Calculate total capacity for visible period
-        var weeksInPeriod = workingDays / 5;
-        var totalCapacity = weeksInPeriod * weeklyCapacity;
-        
-        if (totalCapacity === 0) {
-            return { class: 'rb-status-neutral', title: 'No working days in period' };
-        }
-        
-        var utilization = (allocatedHours / totalCapacity) * 100;
-        
-        if (utilization > 100) {
-            return { class: 'rb-status-overbooked', title: 'Overbooked (' + Math.round(utilization) + '%)' };
-        } else if (utilization >= 80) {
-            return { class: 'rb-status-busy', title: 'High workload (' + Math.round(utilization) + '%)' };
-        } else if (utilization >= 50) {
-            return { class: 'rb-status-moderate', title: 'Moderate workload (' + Math.round(utilization) + '%)' };
-        } else if (utilization > 0) {
-            return { class: 'rb-status-available', title: 'Available (' + Math.round(utilization) + '%)' };
+
+    function resizeAllocation(id, startDaysDelta, newDurationDays) {
+        var alloc = state.allocations.find(function (a) { return a.id == id; });
+        if (!alloc) { loadBoardData(); return; }
+        var newStart = addDays(new Date(alloc.start_date), startDaysDelta);
+        var newEnd   = addDays(newStart, Math.max(newDurationDays - 1, 0));
+        $.ajax({
+            url: config.apiUrl + '/api_upsert_override', type: 'POST',
+            data: { staff_id: alloc.staff_id, project_id: alloc.project_id, task_id: alloc.task_id,
+                    date_from: formatDate(newStart), date_to: formatDate(newEnd),
+                    hours_per_day: alloc.hours_per_day, color: alloc.project_color, note: alloc.note },
+            dataType: 'json',
+            success: function () { loadBoardData(); },
+            error:   function () { loadBoardData(); }
+        });
+    }
+
+    // =========================================================================
+    // ALLOCATION MODAL
+    // =========================================================================
+
+    function openAllocationModal(id, staffId, date) {
+        if (config.isEmployee) return;
+
+        var $modal = $('#rb-allocation-modal');
+        $('#rb-allocation-form')[0].reset();
+        $('#rb-overbooking-warning').hide();
+        $('#rb-alloc-task').empty().append('<option value="">— kein Task —</option>').selectpicker('refresh');
+
+        if (id) {
+            var alloc = state.allocations.find(function (a) { return a.id == id; });
+            if (!alloc) return;
+            $('#rb-modal-title').text('Zuweisung bearbeiten');
+            $('#rb-alloc-id').val(alloc.id);
+            $('#rb-alloc-staff').selectpicker('val', alloc.staff_id);
+            $('#rb-alloc-project').selectpicker('val', alloc.project_id || '');
+            $('#rb-alloc-start').val(alloc.start_date);
+            $('#rb-alloc-end').val(alloc.end_date);
+            $('#rb-alloc-hours').val(alloc.hours_per_day || 8);
+            $('#rb-alloc-weekends').prop('checked', alloc.include_weekends == 1);
+            $('#rb-alloc-note').val(alloc.note || '');
+            if (alloc.project_id) loadTasksDropdown(alloc.project_id, alloc.task_id);
+            if (config.canDelete) $('#rb-delete-allocation').show();
         } else {
-            return { class: 'rb-status-free', title: 'No allocations' };
+            $('#rb-modal-title').text('Neue Zuweisung');
+            $('#rb-alloc-id').val('');
+            $('#rb-delete-allocation').hide();
+            if (staffId) $('#rb-alloc-staff').selectpicker('val', staffId);
+            if (date)    { $('#rb-alloc-start').val(date); $('#rb-alloc-end').val(date); }
         }
+
+        $('.selectpicker').selectpicker('refresh');
+        updateTotalHoursDisplay();
+        $modal.modal('show');
     }
-    
-    function getInitials(firstname, lastname) {
-        var initials = '';
-        if (firstname) initials += firstname.charAt(0).toUpperCase();
-        if (lastname) initials += lastname.charAt(0).toUpperCase();
-        return initials || '??';
-    }
-    
-    function isLightColor(hex) {
-        hex = hex.replace('#', '');
-        if (hex.length === 3) {
-            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-        }
-        var r = parseInt(hex.substr(0, 2), 16);
-        var g = parseInt(hex.substr(2, 2), 16);
-        var b = parseInt(hex.substr(4, 2), 16);
-        var brightness = (r * 299 + g * 587 + b * 114) / 1000;
-        return brightness > 128;
-    }
-    
-    function capitalizeFirst(str) {
-        return str.charAt(0).toUpperCase() + str.slice(1);
-    }
-    
-    /**
-     * Get capacity status for a staff member on a specific date
-     * Returns: 'ok', 'warning', 'full', 'overbooked', or 'off'
-     */
-    function getCapacityStatus(staffId, date) {
-        // Ensure staffId is a string for consistent lookup
-        var staffKey = String(staffId);
-        
-        // Check if we have capacity data for this staff
-        if (!state.capacity || !state.capacity[staffKey]) {
-            return 'ok';
-        }
-        
-        var staffCapacity = state.capacity[staffKey];
-        if (!staffCapacity[date]) {
-            return 'ok';
-        }
-        
-        return staffCapacity[date].status || 'ok';
-    }
-    
-    /**
-     * Check if an allocation contributes to overbooking on any day
-     */
-    function checkAllocationOverbooking(alloc) {
-        var staffId = String(alloc.staff_id);
-        var start = new Date(alloc.start_date);
-        var end = new Date(alloc.end_date);
-        var current = new Date(start);
-        
-        while (current <= end) {
-            var dateStr = formatDate(current);
-            var status = getCapacityStatus(staffId, dateStr);
-            if (status === 'overbooked') {
-                return true;
+
+    function fetchProjectDates(projectId) {
+        $.ajax({
+            url: config.apiUrl + '/api_get_project/' + projectId, type: 'GET', dataType: 'json',
+            success: function (r) {
+                if (r.project) {
+                    if (r.project.start_date) $('#rb-alloc-start').val(r.project.start_date);
+                    if (r.project.deadline)   $('#rb-alloc-end').val(r.project.deadline);
+                    updateTotalHoursDisplay();
+                }
             }
-            current.setDate(current.getDate() + 1);
+        });
+    }
+
+    function fetchTaskDates(taskId) {
+        var ta = state.allocations.find(function (a) {
+            return a.type === 'task' && String(a.task_id) === String(taskId);
+        });
+        if (ta) {
+            if (ta.start_date) $('#rb-alloc-start').val(ta.start_date);
+            if (ta.end_date)   $('#rb-alloc-end').val(ta.end_date);
+            if (ta.estimated_hours) {
+                var days = countWorkingDays(new Date($('#rb-alloc-start').val()), new Date($('#rb-alloc-end').val()));
+                if (days > 0) $('#rb-alloc-hours').val(Math.round(ta.estimated_hours / days * 10) / 10);
+            }
+            updateTotalHoursDisplay();
         }
-        
+    }
+
+    function loadTasksDropdown(projectId, selectedTaskId) {
+        $.ajax({
+            url:  config.apiUrl + '/api_get_tasks',
+            type: 'GET',
+            data: { project_id: projectId, staff_id: $('#rb-alloc-staff').val() || '' },
+            dataType: 'json',
+            success: function (r) {
+                var $s = $('#rb-alloc-task');
+                $s.empty().append('<option value="">— kein Task —</option>');
+                (r.tasks || []).forEach(function (t) {
+                    $s.append('<option value="' + t.id + '"' + (String(t.id) === String(selectedTaskId) ? ' selected' : '') + '>'
+                        + escHtml(t.name) + (t.estimated_hours ? ' (' + t.estimated_hours + 'h)' : '') + '</option>');
+                });
+                $s.selectpicker('refresh');
+            }
+        });
+    }
+
+    function saveAllocation() {
+        var id   = $('#rb-alloc-id').val();
+        var data = {
+            staff_id:   $('#rb-alloc-staff').val(),
+            project_id: $('#rb-alloc-project').val() || null,
+            task_id:    $('#rb-alloc-task').val() || null,
+            date_from:  $('#rb-alloc-start').val(),
+            date_to:    $('#rb-alloc-end').val(),
+            hours_per_day: $('#rb-alloc-hours').val(),
+            include_weekends: $('#rb-alloc-weekends').is(':checked') ? 1 : 0,
+            note:       $('#rb-alloc-note').val()
+        };
+
+        if (!data.staff_id)              { alert_float('warning', 'Mitarbeiter wählen'); return; }
+        if (!data.date_from||!data.date_to) { alert_float('warning', 'Datum wählen'); return; }
+
+        if (id && /^\d+$/.test(id)) {
+            // Update existing override
+            data.id = id;
+            $.ajax({
+                url: config.apiUrl + '/api_upsert_override', type: 'POST', data: data, dataType: 'json',
+                success: function (r) {
+                    if (r.success) { $('#rb-allocation-modal').modal('hide'); alert_float('success', 'Aktualisiert'); loadBoardData(); }
+                    else alert_float('danger', r.error || config.lang.errorSaving);
+                },
+                error: function () { alert_float('danger', config.lang.errorSaving); }
+            });
+        } else {
+            // New: assign + override
+            $.ajax({
+                url: config.apiUrl + '/api_assign_member', type: 'POST',
+                data: { staff_id: data.staff_id, project_id: data.project_id, task_id: data.task_id },
+                dataType: 'json',
+                success: function (r) {
+                    if (r.success) {
+                        $.ajax({
+                            url: config.apiUrl + '/api_upsert_override', type: 'POST', data: data, dataType: 'json',
+                            success: function () { $('#rb-allocation-modal').modal('hide'); alert_float('success', 'Erstellt'); loadBoardData(); },
+                            error:   function () { $('#rb-allocation-modal').modal('hide'); loadBoardData(); }
+                        });
+                    } else {
+                        alert_float('danger', r.error || config.lang.errorSaving);
+                    }
+                },
+                error: function () { alert_float('danger', config.lang.errorSaving); }
+            });
+        }
+    }
+
+    function deleteAllocation() {
+        var id = $('#rb-alloc-id').val();
+        if (!id || !confirm(config.lang.confirmDelete || 'Wirklich löschen?')) return;
+
+        var alloc = state.allocations.find(function (a) { return String(a.id) === String(id); });
+        $.ajax({
+            url:  config.apiUrl + '/api_remove_member', type: 'POST',
+            data: { staff_id: alloc ? alloc.staff_id : '', project_id: alloc ? alloc.project_id : '', task_id: alloc ? alloc.task_id : '' },
+            dataType: 'json',
+            success: function () { $('#rb-allocation-modal').modal('hide'); alert_float('success', 'Gelöscht'); loadBoardData(); },
+            error:   function () { alert_float('danger', 'Fehler beim Löschen'); }
+        });
+    }
+
+    function saveTimeOff() {
+        $.ajax({
+            url: config.apiUrl + '/api_time_off', type: 'POST',
+            data: { staff_id: $('#rb-timeoff-staff').val(), type: $('#rb-timeoff-type').val(),
+                    date_from: $('#rb-timeoff-start').val(), date_to: $('#rb-timeoff-end').val(),
+                    note: $('#rb-timeoff-note').val() },
+            dataType: 'json',
+            success: function (r) {
+                if (r.success) { $('#rb-timeoff-modal').modal('hide'); alert_float('success', 'Abwesenheit eingetragen'); loadBoardData(); }
+                else alert_float('danger', r.message || 'Fehler');
+            },
+            error: function () { alert_float('danger', 'Fehler'); }
+        });
+    }
+
+    function updateTotalHoursDisplay() {
+        var start = $('#rb-alloc-start').val();
+        var end   = $('#rb-alloc-end').val();
+        var hpd   = parseFloat($('#rb-alloc-hours').val()) || 0;
+        if (start && end && hpd > 0) {
+            var days = countWorkingDays(new Date(start), new Date(end));
+            $('#rb-total-hours-display').text(days + ' Werktage × ' + hpd + 'h = ' + (days * hpd) + 'h gesamt');
+        } else {
+            $('#rb-total-hours-display').text('');
+        }
+    }
+
+    // =========================================================================
+    // OVERBOOKING
+    // =========================================================================
+
+    function checkOverbooking() {
+        var list = [];
+        state.staff.forEach(function (s) {
+            var cap = state.capacity[String(s.staffid)];
+            if (!cap) return;
+            var cnt = Object.keys(cap).filter(function (d) { return cap[d].status === 'overbooked'; }).length;
+            if (cnt) list.push(s.firstname + ' ' + s.lastname + ' (' + cnt + 'd)');
+        });
+        var $w = $('#rb-overbooking-warning');
+        if (list.length) {
+            $('#rb-overbooking-message').text(list.join(', '));
+            $w.slideDown();
+        } else {
+            $w.slideUp();
+        }
+    }
+
+    function checkAllocationOverbooking(alloc) {
+        var cap = state.capacity[String(alloc.staff_id)];
+        if (!cap) return false;
+        var d   = new Date((alloc.start_date || '') + 'T00:00:00');
+        var end = new Date((alloc.end_date   || '') + 'T00:00:00');
+        while (d <= end) {
+            var ds = formatDate(d);
+            if (cap[ds] && cap[ds].status === 'overbooked') return true;
+            d.setDate(d.getDate() + 1);
+        }
         return false;
     }
-    
-    /**
-     * Check for overbooking and display warnings
-     */
-    function checkOverbooking() {
-        var overbookedStaff = [];
-        
-        state.staff.forEach(function(staff) {
-            var staffKey = String(staff.staffid);
-            var staffCapacity = state.capacity[staffKey];
-            if (!staffCapacity) {
-                return;
-            }
-            
-            var hasOverbooking = false;
-            var overbookedDates = [];
-            
-            Object.keys(staffCapacity).forEach(function(date) {
-                if (staffCapacity[date].status === 'overbooked') {
-                    hasOverbooking = true;
-                    overbookedDates.push(date);
-                }
-            });
-            
-            if (hasOverbooking) {
-                overbookedStaff.push({
-                    name: staff.firstname + ' ' + staff.lastname,
-                    dates: overbookedDates
-                });
-            }
-        });
-        
-        // Display warning if there are overbookings
-        var $warning = $('#rb-overbooking-warning');
-        if (overbookedStaff.length > 0) {
-            var message = overbookedStaff.map(function(s) {
-                return s.name + ' (' + s.dates.length + ' day' + (s.dates.length > 1 ? 's' : '') + ')';
-            }).join(', ');
-            
-            $('#rb-overbooking-message').text(message);
-            $warning.slideDown();
-        } else {
-            $warning.slideUp();
-        }
+
+    function getCapacityStatus(staffId, date) {
+        var cap = state.capacity[String(staffId)];
+        return (cap && cap[date]) ? (cap[date].status || 'ok') : 'ok';
     }
-    
-    // Public API
-    return {
-        init: init,
-        reload: loadBoardData
-    };
-    
+
+    // =========================================================================
+    // CAPACITY SUMMARY
+    // =========================================================================
+
+    function calculateStaffTotalHours(allocs, visibleDates) {
+        var total = 0;
+        allocs.forEach(function (a) {
+            getDateRange(a.start_date, a.end_date, false).forEach(function (d) {
+                if (visibleDates.indexOf(d) !== -1) total += parseFloat(a.hours_per_day) || 0;
+            });
+        });
+        return Math.round(total * 10) / 10;
+    }
+
+    function calcUtilizationPercent(staffId, allocatedHours) {
+        var cap = state.capacity[String(staffId)];
+        if (!cap) return 0;
+        var avail = 0;
+        getDateRange(state.startDate, state.endDate, false).forEach(function (d) {
+            if (cap[d]) avail += cap[d].available || 0;
+        });
+        return avail > 0 ? Math.round((allocatedHours / avail) * 100) : 0;
+    }
+
+    function utilClass(pct) {
+        if (pct > 100) return 'rb-util-over';
+        if (pct >= 80)  return 'rb-util-high';
+        if (pct >= 50)  return 'rb-util-mid';
+        if (pct > 0)    return 'rb-util-low';
+        return 'rb-util-empty';
+    }
+
+    // =========================================================================
+    // UTILS
+    // =========================================================================
+
+    function formatDate(date) {
+        var d = new Date(date);
+        var m = '' + (d.getMonth() + 1), day = '' + d.getDate();
+        if (m.length < 2) m = '0' + m;
+        if (day.length < 2) day = '0' + day;
+        return d.getFullYear() + '-' + m + '-' + day;
+    }
+
+    function getDateRange(start, end, includeWeekends) {
+        var dates = [], cur = new Date(start), endD = new Date(end);
+        while (cur <= endD) {
+            var dow = cur.getDay();
+            if (includeWeekends || (dow !== 0 && dow !== 6)) dates.push(formatDate(cur));
+            cur.setDate(cur.getDate() + 1);
+        }
+        return dates;
+    }
+
+    function addDays(date, days) { var r = new Date(date); r.setDate(r.getDate() + days); return r; }
+
+    function countWorkingDays(start, end) {
+        var n = 0, c = new Date(start);
+        while (c <= end) { var d = c.getDay(); if (d !== 0 && d !== 6) n++; c.setDate(c.getDate() + 1); }
+        return n;
+    }
+
+    function getInitials(fn, ln) {
+        return ((fn ? fn.charAt(0).toUpperCase() : '') + (ln ? ln.charAt(0).toUpperCase() : '')) || '??';
+    }
+
+    function isLightColor(hex) {
+        hex = (hex || '#3498db').replace('#', '');
+        if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+        var r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+        return (r*299 + g*587 + b*114) / 1000 > 128;
+    }
+
+    function capitalizeFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+
+    function escHtml(s) {
+        return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    // =========================================================================
+    // PUBLIC API
+    // =========================================================================
+
+    return { init: init, reload: loadBoardData };
+
 })();
