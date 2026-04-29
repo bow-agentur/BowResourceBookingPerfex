@@ -221,3 +221,4 @@ $lang['overload_warning']           = 'Overload detected';
 $lang['own_row_label']              = 'Me';
 $lang['collapse_expand']            = 'Collapse/expand row';
 $lang['task_hours_updated']         = 'Hours updated';
+$lang['add_as_follower']            = 'Add as project follower';

@@ -104,6 +104,18 @@
             </div>
         </div>
 
+        <!-- Board-level overbooking banner -->
+        <div class="row">
+            <div class="col-md-12">
+                <div id="rb-board-overbooking-warning">
+                    <span class="rb-board-overbooking-close">&times;</span>
+                    <i class="fa fa-exclamation-triangle"></i>
+                    <strong><?php echo _l('overbooking_warning'); ?></strong>
+                    <span id="rb-board-overbooking-message"></span>
+                </div>
+            </div>
+        </div>
+
         <!-- Planning Board Grid -->
         <div class="row">
             <div class="col-md-12">
@@ -232,6 +244,11 @@
                         <label for="rb-alloc-note"><?php echo _l('note'); ?></label>
                         <textarea class="form-control" name="note" id="rb-alloc-note" rows="3"></textarea>
                     </div>
+
+                    <div class="checkbox checkbox-primary">
+                        <input type="checkbox" name="add_as_follower" id="rb-alloc-follower" value="1">
+                        <label for="rb-alloc-follower"><?php echo _l('add_as_follower'); ?></label>
+                    </div>
                     
                     <!-- Overbooking Warning -->
                     <div class="alert alert-warning" id="rb-overbooking-warning" style="display: none;">
@@ -335,6 +352,10 @@
 <!-- Planning Board Assets -->
 <link rel="stylesheet" href="<?php echo module_dir_url('resourcebooking', 'assets/css/planning-board.css'); ?>?v=<?php echo time(); ?>">
 <script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.18/dist/interact.min.js"></script>
+<script src="<?php echo module_dir_url('resourcebooking', 'assets/js/modules/pb-utils.js'); ?>?v=<?php echo time(); ?>"></script>
+<script src="<?php echo module_dir_url('resourcebooking', 'assets/js/modules/pb-render.js'); ?>?v=<?php echo time(); ?>"></script>
+<script src="<?php echo module_dir_url('resourcebooking', 'assets/js/modules/pb-drag.js'); ?>?v=<?php echo time(); ?>"></script>
+<script src="<?php echo module_dir_url('resourcebooking', 'assets/js/modules/pb-modal.js'); ?>?v=<?php echo time(); ?>"></script>
 <script src="<?php echo module_dir_url('resourcebooking', 'assets/js/planning-board.js'); ?>?v=<?php echo time(); ?>"></script>
 
 <script>

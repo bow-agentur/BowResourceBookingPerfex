@@ -221,3 +221,5 @@ $lang['overload_warning']           = 'Überlastung erkannt';
 $lang['own_row_label']              = 'Ich';
 $lang['collapse_expand']            = 'Zeile ein-/ausklappen';
 $lang['task_hours_updated']         = 'Stunden aktualisiert';
+
+$lang['add_as_follower']            = 'Als Projekt-Follower hinzufügen';

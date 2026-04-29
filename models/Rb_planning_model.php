@@ -1332,4 +1332,39 @@ class Rb_planning_model extends App_Model
         
         return $this->db->get()->result_array();
     }
+
+    /**
+     * Add a staff member as a project follower (project_activity watcher).
+     * Uses Perfex's tblproject_activity to register the follower if not already present.
+     *
+     * @param int $staff_id
+     * @param int $project_id
+     * @return bool
+     */
+    public function add_project_follower($staff_id, $project_id)
+    {
+        $staff_id   = (int)$staff_id;
+        $project_id = (int)$project_id;
+        if (!$staff_id || !$project_id) return false;
+
+        // Check if already a follower
+        $exists = $this->db->get_where(
+            db_prefix() . 'project_members',
+            ['project_id' => $project_id, 'staff_id' => $staff_id]
+        )->row();
+
+        if ($exists) return true; // already a member, skip
+
+        // Use Perfex's projects model if loaded; otherwise insert directly
+        if (function_exists('add_project_member')) {
+            return add_project_member($project_id, $staff_id);
+        }
+
+        $this->db->insert(db_prefix() . 'project_members', [
+            'project_id' => $project_id,
+            'staff_id'   => $staff_id
+        ]);
+
+        return $this->db->affected_rows() > 0;
+    }
 }

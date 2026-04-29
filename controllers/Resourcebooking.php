@@ -616,6 +616,12 @@ class Resourcebooking extends AdminController
       return;
     }
 
+    // Optionally add the staff member as a project follower
+    $add_as_follower = (int)$this->input->post('add_as_follower');
+    if ($add_as_follower && $project_id) {
+      $this->rb_planning_model->add_project_follower($staff_id, $project_id);
+    }
+
     echo json_encode(['success' => (bool)$ok]);
   }
 
