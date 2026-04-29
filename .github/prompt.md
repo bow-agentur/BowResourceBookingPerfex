@@ -105,46 +105,83 @@ ALTER TABLE `tblitems_tasks`   -- tatsächlich: tbltasks
 
 ---
 
-### 6. Bidirektionale Synchronisation — Planungstafel ↔ Perfex
+### 6. Datenarchitektur — Live View statt redundanter Speicherung
 
-**Soll:** Änderungen in der Planungstafel schreiben zurück nach Perfex:
+**Entscheidung:** Die Planungstafel ist eine **Live View über Perfex-Daten**. Es werden KEINE redundanten Allocations in `rb_allocations` für alle Projekt-/Task-Mitgliedschaften angelegt. Stattdessen:
 
-| Aktion in Planungstafel | Aktion in Perfex |
+- `api_board_data` liest **live** aus `project_members`, `task_assigned`, `tasks`, `projects`
+- `rb_allocations` speichert ausschließlich **Planungs-Overrides** die Perfex nicht kennt: spezifische h/Tag, Farbe, Notiz, und Task-Stunden-Schätzungen
+- Beim Laden des Boards: jeder `project_members`-Eintrag erscheint automatisch als Balken, auch ohne passende Allocation
+- Planungs-Daten (h/d, Farbe) werden per `(staff_id, project_id, task_id)` aus `rb_allocations` geladen und über den Perfex-Datensatz gelegt
+
+**Schreibrichtung Board → Perfex:**
+
+| Aktion in Planungstafel | Schreibt nach Perfex |
 |---|---|
-| Neue Allocation für Projekt erstellt | Staff zu `project_members` hinzufügen (wenn nicht vorhanden) |
-| Neue Allocation für Task erstellt | Staff zu `task_assigned` hinzufügen (wenn nicht vorhanden) |
-| Allocation gelöscht | Staff aus `project_members` / `task_assigned` entfernen |
-| Task-Stunden auf Balken bearbeitet | `tasks.estimated_hours` aktualisieren |
-| Mitarbeiter als Follower gesetzt | `project_activity` / Follower-Tabelle aktualisieren |
-| Mitarbeiter direkt über Board einem Projekt hinzugefügt | `project_members` INSERT |
+| Mitarbeiter via Board einem Projekt zugewiesen | `project_members` INSERT |
+| Mitarbeiter via Board einem Task zugewiesen | `task_assigned` INSERT |
+| Mitarbeiter aus Projekt entfernt | `project_members` DELETE |
 
-**Umgekehrt (Perfex → Planungstafel):**
-- `api_board_data` liest IMMER frisch aus Perfex-Tabellen: `project_members`, `task_assigned`
-- Existing Allocations die keinen passenden `project_member`-Eintrag mehr haben → visuelle Warnung ("nicht mehr Mitglied")
+| Mitarbeiter aus Task entfernt | `task_assigned` DELETE |
+| Task-Stunden bearbeitet | `tasks.estimated_hours` UPDATE |
+| h/Tag oder Farbe auf Balken geändert | `rb_allocations` UPSERT (nur Planungs-Override) |
+| Mitarbeiter als Follower gesetzt | Follower-Tabelle UPDATE |
 
-**PHP in Model:**
-```php
-// Bei add_allocation:
-$this->sync_to_perfex_on_create($allocation);
-
-// Bei delete_allocation:
-$this->sync_to_perfex_on_delete($id);
-```
+**Automatismus:** Wenn in Perfex ein Projekt/Task-Mitglied hinzugefügt wird, erscheint es beim nächsten Board-Load automatisch ohne zusätzliche Aktion.
 
 ---
 
-### 7. Berechtigungen
+### 7. Berechtigungen & Mitarbeiter-Ansicht
 
 | Rolle | Planungstafel | Reports |
 |---|---|---|
-| Admin | Vollzugriff (lesen, erstellen, bearbeiten, löschen) | Vollzugriff |
-| Mitarbeiter | Nur lesen (eigene Zeile sehen) | Kein Zugriff |
+| Admin | Vollzugriff (lesen, erstellen, bearbeiten, löschen, alle Mitarbeiter) | Vollzugriff |
+| Mitarbeiter | Lesen (gesamtes Board), eigene Zeile + eigene Ziele sichtbar | Kein Zugriff |
+
+**Mitarbeiter sehen das Board — aber:**
+- Alle Mitarbeiter-Zeilen werden angezeigt (nicht nur die eigene), damit Kollegen-Auslastung sichtbar ist
+- Eigene Zeile ist visuell hervorgehoben
+- **Ziele:** Im Staff-Header wird angezeigt, welche Projekte/Tasks dem Mitarbeiter zugewiesen sind + ihre geplanten Stunden — das sind die persönlichen Arbeitsziele
+- Drag&Drop, Resize, Edit-Buttons, "Neue Zuweisung" komplett deaktiviert für Mitarbeiter
+- `config.isEmployee = true` wird serverseitig gesetzt wenn `get_staff_user_id()` kein Admin ist
 
 **Implementierung:**
 - `has_permission('resourcebooking', '', 'create')` → Nur Admins
-- Mitarbeiter-Ansicht: gefiltert auf `staffid = get_staff_user_id()`
-- JS: `config.canEdit = false` für Mitarbeiter → Drag&Drop, Resize, Buttons deaktiviert
-- Toolbar "Neue Zuweisung" Button nicht rendern wenn kein Create-Recht
+- `config.canEdit = false` für Mitarbeiter → interact.js nicht initialisiert
+- Mitarbeiter-eigene Zeile: CSS-Klasse `rb-own-row` für Highlighting
+
+---
+
+### 8. Integration bowhumanressources — Urlaub, Krank, Feiertage
+
+**Entscheidung:** Die `rb_time_off`-Tabelle wird **nicht** für Urlaub/Krank/Feiertage genutzt. Diese Daten werden live aus dem `bowhumanressources`-Modul gelesen.
+
+**Quell-Tabellen (bowhumanressources):**
+
+| Datentyp | Tabelle | Bedingung |
+|---|---|---|
+| Genehmigte Abwesenheiten (Urlaub, Krank, HO) | `tblhr_absences` | `status = 'approved'` |
+| Gesetzliche Feiertage | `tblhr_public_holidays` | aktives Jahr, passendes Bundesland |
+
+**`rb_time_off` bleibt nur für:** manuell eingetragene Sperrzeiten die nicht aus HR stammen (z.B. interne Events).
+
+**Kapazitätsberechnung:** `available_hours` = Work-Pattern-Stunden − HR-Abwesenheits-Stunden − Feiertags-Stunden
+
+**Abhängigkeit absichern:**
+```php
+// In Rb_planning_model::get_board_data()
+if ($this->db->table_exists(db_prefix() . 'hr_absences')) {
+    // HR-Abwesenheiten laden
+} else {
+    // Fallback auf rb_time_off
+}
+```
+
+**Überstunden-Warnung:**
+- Wenn `geplante_stunden_pro_tag > verfügbare_stunden_pro_tag`: Balken wird **rot** dargestellt
+- Zusätzlich: Perfex-System-Notification für den betroffenen Mitarbeiter und den Admin
+- Notification-Text: "[Mitarbeitername] ist am [Datum] mit [X]h überlastet ([Projekt])"
+- Notification wird über `add_notification()` Perfex-Hook angelegt, nur bei Speichern/Aktualisieren einer Allocation
 
 ---
 
@@ -158,68 +195,110 @@ $this->sync_to_perfex_on_delete($id);
 - Hooks registrieren: `add_action('before_add_task', ...)` und `add_action('before_update_task', ...)`
 - Hook-Handler in `resourcebooking.php` oder separater `includes/task_hooks.php`
 
-**Schritt 1.2 — Allocations: source_type & source_sync Flags**
-- `rb_allocations` erweitern:
-  ```sql
-  ADD COLUMN `source_type` ENUM('manual','project_sync','task_sync') DEFAULT 'manual',
-  ADD COLUMN `is_synced_member` TINYINT(1) DEFAULT 0
-  ```
+**Schritt 1.2 — Allocations: nur Planungs-Overrides speichern**
+- `rb_allocations` speichert NUR was Perfex nicht hat: `hours_per_day`, `color`, `note` pro `(staff_id, project_id, task_id)`
+- Eindeutiger Index: `UNIQUE KEY (staff_id, project_id, task_id)` → UPSERT möglich
+- `source_type`/`is_synced_member` entfallen — nicht nötig da Board live aus Perfex liest
+- Migration: bestehende `rb_allocations` Einträge behalten, nur redundante Datums-Felder werden ignoriert wenn Projekt-Daten verfügbar
 
-**Schritt 1.3 — API: Tasks in board_data**
-- `get_board_data()` in Model: für jede Allocation Tasks des Projekts laden (gefiltert auf Staff)
+**Schritt 1.3 — API: Live-Daten aus Perfex + HR**
+- `get_board_data()` im Model: JOIN über `project_members` + `projects` + `tasks` + `task_assigned`
+- Für jeden Staff + Projekt: Allocation-Override aus `rb_allocations` per LEFT JOIN laden (falls vorhanden)
 - Task-Daten: `id, name, startdate, duedate, estimated_hours, status, daily_avg`
+- HR-Daten: `hr_absences` (approved) + `hr_public_holidays` per LEFT JOIN, Fallback auf `rb_time_off`
+
+**Schritt 1.4 — bowhumanressources Integration**
+- Prüfen ob HR-Tabellen existieren: `tblhr_absences`, `tblhr_public_holidays`
+- `rb_capacity_helper.php`: Funktion `rb_get_available_hours($staff_id, $date)` — liest aus HR falls verfügbar
+- Kapazitätsfarben: Grün (≤80%), Orange (81–100%), Rot (>100% = Überlastung + Notification)
 
 ---
 
 ### Phase 2 — Backend-Logik
 
-**Schritt 2.1 — Bidirektionale Sync-Methoden in `Rb_planning_model`**
+**Schritt 2.1 — Live Board-Daten aus Perfex lesen**
 
 ```php
-private function sync_to_perfex_on_create($allocation)
+public function get_board_data($date_from, $date_to, $filters = [])
 {
-    if ($allocation['project_id']) {
-        // project_members: INSERT IGNORE
-        $exists = $this->db->where(['project_id' => $pid, 'staff_id' => $sid])
-                           ->get(db_prefix() . 'project_members')->num_rows();
-        if (!$exists) {
-            $this->db->insert(db_prefix() . 'project_members', [
-                'project_id' => $allocation['project_id'],
-                'staff_id'   => $allocation['staff_id']
-            ]);
-        }
-    }
-    if ($allocation['task_id']) {
-        // task_assigned: analog
-    }
-}
+    // 1. Projekt-Mitgliedschaften direkt aus project_members + projects
+    $this->db->select('pm.staff_id, p.id as project_id, p.name as project_name,
+        p.start_date, p.deadline,
+        a.hours_per_day, a.color, a.note,  -- Planungs-Overrides (nullable)
+        s.firstname, s.lastname');
+    $this->db->from(db_prefix() . 'project_members pm');
+    $this->db->join(db_prefix() . 'projects p', 'p.id = pm.project_id');
+    $this->db->join(db_prefix() . 'staff s', 's.staffid = pm.staff_id');
+    $this->db->join($this->table_allocations . ' a',
+        'a.staff_id = pm.staff_id AND a.project_id = pm.project_id AND a.task_id IS NULL',
+        'left');
+    // ... Filter + Task-Zuweisungen analog
 
-private function sync_to_perfex_on_delete($id)
-{
-    $allocation = $this->get_allocation($id);
-    // Prüfen ob andere Allocations für gleichen Staff+Projekt noch existieren
-    // Wenn nein: aus project_members/task_assigned entfernen
+    // 2. HR-Abwesenheiten und Feiertage
+    $time_off = $this->get_hr_time_off($date_from, $date_to);
+
+    // 3. Kapazität berechnen (work_patterns vs. time_off)
+    // 4. Überlastungen ermitteln → Notification auslösen falls nötig
 }
 ```
 
-**Schritt 2.2 — Controller: Task-Stunden updaten via API**
+**Schritt 2.2 — Board schreibt direkt nach Perfex (kein separater Sync)**
 
 ```php
-public function api_update_task_hours()
+public function assign_staff_to_project($staff_id, $project_id)
 {
-    // POST: task_id, estimated_hours
-    // Schreibt zurück nach tbltasks
+    // INSERT IGNORE in project_members
+    // UPSERT in rb_allocations für Planungs-Override
+    // Perfex-Hook: log_activity() + add_notification() wenn Überlastung
+}
+
+public function assign_staff_to_task($staff_id, $task_id)
+{
+    // INSERT IGNORE in task_assigned
+    // UPSERT in rb_allocations
+}
+
+public function remove_staff_from_project($staff_id, $project_id)
+{
+    // DELETE aus project_members
+    // DELETE aus rb_allocations (Planungs-Override entfernen)
 }
 ```
 
-**Schritt 2.3 — Controller: Direkt Member hinzufügen**
+**Schritt 2.3 — Controller: Direkte Board-Aktionen**
 
 ```php
-public function api_add_member()
+public function api_assign_member()   { /* POST: staff_id + project_id|task_id → schreibt nach Perfex */ }
+public function api_remove_member()   { /* POST: staff_id + project_id|task_id → entfernt aus Perfex */ }
+public function api_update_task_hours() { /* POST: task_id, estimated_hours → tbltasks */ }
+public function api_upsert_override() { /* POST: staff_id, project_id|task_id, hours_per_day, color, note → rb_allocations */ }
+```
+
+**Schritt 2.4 — HR-Integration im Model**
+
+```php
+private function get_hr_time_off($date_from, $date_to)
 {
-    // POST: staff_id, project_id | task_id
-    // Fügt zu project_members/task_assigned hinzu
-    // Erstellt optional direkt eine Allocation
+    if ($this->db->table_exists(db_prefix() . 'hr_absences')) {
+        // Approved Abwesenheiten aus HR-Modul
+        return $this->db->select('staff_id, start_date, end_date, type')
+            ->where('status', 'approved')
+            ->where('start_date <=', $date_to)
+            ->where('end_date >=', $date_from)
+            ->get(db_prefix() . 'hr_absences')->result_array();
+    }
+    // Fallback: rb_time_off
+    return $this->get_time_off(['date_from' => $date_from, 'date_to' => $date_to]);
+}
+
+private function get_hr_holidays($date_from, $date_to)
+{
+    if ($this->db->table_exists(db_prefix() . 'hr_public_holidays')) {
+        return $this->db->where('date >=', $date_from)
+            ->where('date <=', $date_to)
+            ->get(db_prefix() . 'hr_public_holidays')->result_array();
+    }
+    return [];
 }
 ```
 
@@ -292,15 +371,25 @@ if (!config.canEdit) {
 ## Datenbankschema — Zusammenfassung der Änderungen
 
 ```sql
--- 1. Tasks: geschätzte Stunden
+-- 1. Tasks: geschätzte Stunden (einzige Änderung an Perfex-Kerntabellen)
 ALTER TABLE `tbltasks`
   ADD COLUMN `estimated_hours` DECIMAL(6,2) NULL DEFAULT NULL AFTER `duedate`;
 
--- 2. Allocations: Sync-Flags
+-- 2. rb_allocations: Unique Key für UPSERT-Fähigkeit (Planungs-Overrides)
+--    source_type und is_synced_member entfallen (nicht mehr nötig)
 ALTER TABLE `tblrb_allocations`
-  ADD COLUMN `source_type` ENUM('manual','project_sync','task_sync') NOT NULL DEFAULT 'manual' AFTER `updated_at`,
-  ADD COLUMN `is_synced_member` TINYINT(1) NOT NULL DEFAULT 0 AFTER `source_type`;
+  ADD UNIQUE KEY `uq_staff_project_task` (`staff_id`, `project_id`, `task_id`);
+
+-- 3. rb_time_off bleibt für manuelle Sperrzeiten; Urlaub/Feiertage
+--    werden NICHT hierhin geschrieben, sondern live aus bowhumanressources gelesen.
 ```
+
+**Kein Zugriff auf Perfex-Kern außer:**
+- `tbltasks.estimated_hours` — neues Feld
+- `project_members` — lesen + schreiben (Board-Aktionen)
+- `task_assigned` — lesen + schreiben (Board-Aktionen)
+- `projects`, `tasks` — nur lesen
+- `tblhr_absences`, `tblhr_public_holidays` — nur lesen (bowhumanressources)
 
 ---
 
@@ -308,34 +397,39 @@ ALTER TABLE `tblrb_allocations`
 
 | Methode | Endpoint | Beschreibung |
 |---|---|---|
-| GET | `api_board_data` | Board-Daten inkl. Tasks und daily_avg |
-| GET/POST | `api_allocations` | CRUD Allocations |
-| PUT/DELETE | `api_allocations/$id` | Update/Delete + Perfex-Sync |
-| POST | `api_add_member` | Mitarbeiter direkt zu Projekt/Task hinzufügen |
-| POST | `api_update_task_hours` | `estimated_hours` in tbltasks schreiben |
-| GET | `api_get_project` | Projektdaten (für Auto-Datum im Dialog) |
-| GET | `api_get_tasks` | Tasks eines Projekts (für Task-Dropdown) |
+| GET | `api_board_data` | Live-Daten: Projekte, Tasks, HR-Abwesenheiten, Kapazität |
+| GET/POST | `api_allocations` | CRUD Planungs-Overrides (h/d, Farbe, Notiz) |
+| DELETE | `api_allocations/$id` | Override löschen (entfernt NICHT aus Perfex) |
+| POST | `api_assign_member` | Mitarbeiter zu Projekt/Task hinzufügen → schreibt nach Perfex |
+| POST | `api_remove_member` | Mitarbeiter aus Projekt/Task entfernen → schreibt nach Perfex |
+| POST | `api_update_task_hours` | `estimated_hours` in `tbltasks` schreiben |
+| POST | `api_upsert_override` | h/Tag, Farbe, Notiz in `rb_allocations` UPSERT |
+| GET | `api_get_project` | Projektdaten inkl. `start_date`, `deadline` (für Auto-Datum) |
+| GET | `api_get_tasks` | Tasks eines Projekts gefiltert nach Staff |
 
 ---
 
 ## Arbeitsreihenfolge (Empfehlung)
 
-1. **DB-Migration** — `estimated_hours` + Allocation-Flags (`install.php` + Auto-Migration)
-2. **Hook für Task-Stunden** — Perfex-Integration, sodass Stunden im normalen Task-Formular gesetzt werden können
-3. **Model erweitern** — `get_board_data` liefert Tasks; Sync-Methoden implementieren
-4. **Controller-Endpunkte** — `api_add_member`, `api_update_task_hours`, `api_get_project`, `api_get_tasks`
-5. **JS: Lane-Packing** — Algorithmus + Rendering der Staff-Gruppen mit Lanes
-6. **JS: Allocation-Dialog** — Auto-Datum, Task-Dropdown, Follower-Checkbox
-7. **JS: Task-Balken** — Rendern, Hover-Tooltip, Inline-Edit Stunden
-8. **Berechtigungs-Enforcement** — Admin/Mitarbeiter-Unterscheidung im JS + PHP
-9. **Reports** — Admin-only Gate + Highcharts Auslastungs-Chart
-10. **Cleanup** — Sprach-Strings DE/EN vervollständigen, QA
+1. **DB-Migration** — `tbltasks.estimated_hours` + Unique Key auf `rb_allocations` (`install.php` + Auto-Migration)
+2. **Hook für Task-Stunden** — `before_add_task` / `before_update_task` Hooks in `resourcebooking.php` registrieren
+3. **HR-Integration im Model** — `get_hr_time_off()` + `get_hr_holidays()` mit Fallback implementieren
+4. **Model: `get_board_data` umschreiben** — Live-Join über Perfex-Tabellen, Planungs-Overrides per LEFT JOIN
+5. **Model: Write-Methoden** — `assign_staff_to_project/task`, `remove_staff_from_project/task`, `upsert_override`
+6. **Controller-Endpunkte** — alle neuen API-Methoden implementieren, Perfex-Notification bei Überlastung
+7. **JS: Lane-Packing** — Algorithmus + Rendering der Staff-Gruppen mit Lanes
+8. **JS: Mitarbeiter-Ziele** — eigene Zeile highlighten, Ziel-Anzeige im Staff-Header
+9. **JS: Allocation-Dialog** — Auto-Datum aus Projekt/Task, Task-Dropdown, Follower-Checkbox
+10. **JS: Task-Balken** — Rendern, Hover-Tooltip, Inline-Edit Stunden, Überlastungsfarben
+11. **Berechtigungs-Enforcement** — Admin/Mitarbeiter-Unterscheidung in JS + PHP, Mitarbeiter read-only
+12. **Reports** — Admin-only Gate + Highcharts Auslastungs-Chart (Geplant h vs. Verfügbar h)
+13. **Cleanup** — Sprach-Strings DE/EN vervollständigen, QA
 
 ---
 
-## Offene Fragen / Entscheidungen
+## Entscheidungen (beschlossen)
 
-- [ ] Sollen Allocations die durch Sync entstehen (Mitglied schon im Projekt) **automatisch** angelegt werden beim Laden des Boards oder **nur** wenn der Nutzer explizit hinzufügt?
-- [ ] Soll die Planungstafel für Mitarbeiter ihre eigene Zeile zeigen oder gar nicht zugänglich sein?
-- [ ] Überstunden-Warnung (>8h/d): Nur visuell (Rot) oder auch als Notification?
-- [ ] Feiertage: Aus `bowhumanressources`-Modul ziehen oder eigenständig im `rb_time_off` verwalten?
+- [x] **Allocation-Strategie:** Board liest live aus Perfex (`project_members`, `task_assigned`). `rb_allocations` speichert nur Planungs-Overrides (h/Tag, Farbe, Notiz). Keine redundante Datenhaltung.
+- [x] **Mitarbeiter-Ansicht:** Mitarbeiter sehen das gesamte Board read-only. Eigene Zeile ist hervorgehoben. Persönliche Ziele (Projekte + Tasks + geplante h) werden im Staff-Header angezeigt.
+- [x] **Überlastungs-Warnung:** Visuell (roter Balken) + Perfex-Notification für Mitarbeiter und Admin beim Speichern/Aktualisieren.
+- [x] **Feiertage & Urlaub:** Werden live aus `bowhumanressources`-Modul gelesen (`tblhr_absences`, `tblhr_public_holidays`). Fallback auf `rb_time_off` wenn HR-Modul nicht installiert.
