@@ -727,6 +727,26 @@ class Resourcebooking extends AdminController
     }
 
     $id = $this->rb_planning_model->upsert_override($data);
+
+    // If a task is linked, write total estimated hours back to the task
+    // so the task always reflects the planned effort from the board.
+    if ($id && !empty($data['task_id']) && !empty($data['hours_per_day'])
+        && !empty($data['date_from']) && !empty($data['date_to'])) {
+      $this->load->helper('resourcebooking/rb_capacity');
+      $include_weekends = !empty($data['include_weekends']);
+      if ($include_weekends) {
+        $d1   = new DateTime($data['date_from']);
+        $d2   = new DateTime($data['date_to']);
+        $days = (int)$d1->diff($d2)->days + 1;
+      } else {
+        $days = rb_count_working_days($data['date_from'], $data['date_to']);
+      }
+      if ($days > 0) {
+        $total_hours = round((float)$data['hours_per_day'] * $days, 2);
+        $this->rb_planning_model->update_task_hours((int)$data['task_id'], $total_hours);
+      }
+    }
+
     echo json_encode(['success' => (bool)$id, 'id' => $id]);
   }
 

@@ -228,12 +228,24 @@
                         </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="rb-alloc-hours"><?php echo _l('hours_per_day'); ?> <span class="text-danger">*</span></label>
-                        <input type="number" class="form-control" name="hours_per_day" id="rb-alloc-hours" 
-                               min="0.5" max="24" step="0.5" value="8" required>
-                        <p class="text-muted mtop5" id="rb-total-hours-display"></p>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="rb-alloc-hours"><?php echo _l('hours_per_day'); ?> <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" name="hours_per_day" id="rb-alloc-hours"
+                                       min="0.5" max="24" step="0.5" value="8" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="rb-alloc-total-hours"><?php echo _l('estimated_hours'); ?></label>
+                                <input type="number" class="form-control" id="rb-alloc-total-hours"
+                                       min="0" step="0.5" placeholder="auto">
+                                <small class="text-muted"><?php echo _l('total_hours_auto_hint'); ?></small>
+                            </div>
+                        </div>
                     </div>
+                    <p class="text-muted" id="rb-total-hours-display" style="margin-top:-8px;margin-bottom:10px;font-size:12px;"></p>
                     
                     <div class="checkbox checkbox-primary">
                         <input type="checkbox" name="include_weekends" id="rb-alloc-weekends" value="1">

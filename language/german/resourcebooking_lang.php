@@ -229,3 +229,5 @@ $lang['from']                       = 'Von';
 $lang['to']                         = 'Bis';
 $lang['no_records_found']           = 'Keine Einträge gefunden';
 $lang['hours_use']                  = 'Geplante Stunden';
+$lang['total_hours_auto_hint']      = 'Gesamtstunden eintragen, um Stunden/Tag automatisch zu berechnen';
+$lang['hours_per_day']              = 'Stunden pro Tag';

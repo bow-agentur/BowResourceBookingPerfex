@@ -53,6 +53,12 @@ var PB_Modal = (function () {
             $('#rb-alloc-hours').val(alloc.hours_per_day || 8);
             $('#rb-alloc-weekends').prop('checked', alloc.include_weekends == 1);
             $('#rb-alloc-note').val(alloc.note || '');
+            // Pre-fill total hours from task estimated_hours if known
+            if (alloc.estimated_hours) {
+                $('#rb-alloc-total-hours').val(alloc.estimated_hours);
+            } else {
+                $('#rb-alloc-total-hours').val('');
+            }
 
             if (alloc.project_id) {
                 loadTasksDropdown(alloc.project_id, alloc.task_id);
@@ -72,6 +78,7 @@ var PB_Modal = (function () {
 
         $('.selectpicker').selectpicker('refresh');
         updateTotalHoursDisplay();
+        initHoursBidirectional();
         $modal.modal('show');
     }
 
@@ -113,6 +120,7 @@ var PB_Modal = (function () {
 
             // Auto-compute hours/day from estimated_hours ÷ working days
             var est = parseFloat(task.estimated_hours) || 0;
+            $('#rb-alloc-total-hours').val(est > 0 ? est : '');
             if (est > 0 && start && end) {
                 var days = PB_Utils.countWorkingDays(new Date(start), new Date(end));
                 if (days > 0) {
@@ -354,18 +362,80 @@ var PB_Modal = (function () {
     // HELPERS
     // =========================================================================
 
+    /**
+     * Update the summary text line and keep total-hours field in sync with
+     * hours_per_day × working days (one-way: hpd → total).
+     * Only overwrites total-hours if the user hasn't manually edited it.
+     */
     function updateTotalHoursDisplay() {
         var start = $('#rb-alloc-start').val();
         var end   = $('#rb-alloc-end').val();
         var hpd   = parseFloat($('#rb-alloc-hours').val()) || 0;
         if (start && end && hpd > 0) {
-            var days = PB_Utils.countWorkingDays(new Date(start), new Date(end));
+            var days  = PB_Utils.countWorkingDays(new Date(start), new Date(end));
+            var total = Math.round(days * hpd * 10) / 10;
             $('#rb-total-hours-display').text(
-                days + ' Werktage × ' + hpd + 'h = ' + (days * hpd) + 'h gesamt'
+                days + ' Werktage × ' + hpd + 'h = ' + total + 'h gesamt'
             );
+            // Sync total-hours field if it isn't being manually edited
+            if (!$('#rb-alloc-total-hours').data('user-edited')) {
+                $('#rb-alloc-total-hours').val(total);
+            }
         } else {
             $('#rb-total-hours-display').text('');
         }
+    }
+
+    /**
+     * Wire up the bidirectional relationship between hours/day ↔ total hours.
+     * Called once each time the modal opens.
+     */
+    function initHoursBidirectional() {
+        var $hpd   = $('#rb-alloc-hours');
+        var $total = $('#rb-alloc-total-hours');
+        var $start = $('#rb-alloc-start');
+        var $end   = $('#rb-alloc-end');
+
+        // Reset user-edited flag when modal opens
+        $total.data('user-edited', false);
+
+        // When user edits total → recompute hpd
+        $total.off('input.rbhours').on('input.rbhours', function () {
+            $total.data('user-edited', true);
+            var tot  = parseFloat($total.val()) || 0;
+            var s    = $start.val();
+            var e    = $end.val();
+            if (tot > 0 && s && e) {
+                var days = PB_Utils.countWorkingDays(new Date(s), new Date(e));
+                if (days > 0) {
+                    $hpd.val(Math.round((tot / days) * 10) / 10);
+                    updateTotalHoursDisplay();
+                }
+            }
+        });
+
+        // When user edits hpd → clear user-edited flag so total syncs
+        $hpd.off('input.rbhours').on('input.rbhours', function () {
+            $total.data('user-edited', false);
+            updateTotalHoursDisplay();
+        });
+
+        // When dates change → recompute from whichever side was last set
+        $start.add($end).off('change.rbhours').on('change.rbhours', function () {
+            if ($total.data('user-edited')) {
+                // Recompute hpd from fixed total
+                var tot  = parseFloat($total.val()) || 0;
+                var s    = $start.val();
+                var e    = $end.val();
+                if (tot > 0 && s && e) {
+                    var days = PB_Utils.countWorkingDays(new Date(s), new Date(e));
+                    if (days > 0) {
+                        $hpd.val(Math.round((tot / days) * 10) / 10);
+                    }
+                }
+            }
+            updateTotalHoursDisplay();
+        });
     }
 
     // =========================================================================
@@ -382,6 +452,7 @@ var PB_Modal = (function () {
         deleteAllocation:        deleteAllocation,
         saveTimeOff:             saveTimeOff,
         initInlineEdit:          initInlineEdit,
+        initHoursBidirectional:  initHoursBidirectional,
         updateTotalHoursDisplay: updateTotalHoursDisplay
     };
 
