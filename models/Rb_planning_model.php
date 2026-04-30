@@ -1381,4 +1381,99 @@ class Rb_planning_model extends App_Model
 
         return $this->db->affected_rows() > 0;
     }
+
+    /**
+     * Get tasks with assignment details for reporting.
+     * Returns one row per (task, staff) pair that overlaps [date_from, date_to].
+     *
+     * @param string $date_from
+     * @param string $date_to
+     * @param int|null $staff_id   filter by staff
+     * @param int|null $project_id filter by project
+     * @return array
+     */
+    public function get_tasks_for_report($date_from, $date_to, $staff_id = null, $project_id = null)
+    {
+        // Base: tasks assigned to staff within the date window
+        $this->db->select(
+            't.id                  AS task_id,
+             t.name                AS task_name,
+             t.status              AS task_status,
+             t.startdate           AS task_start,
+             t.duedate             AS task_due,
+             t.estimated_hours,
+             p.id                  AS project_id,
+             p.name                AS project_name,
+             p.color               AS project_color,
+             s.staffid,
+             s.firstname,
+             s.lastname,
+             a.id                  AS override_id,
+             a.hours_per_day       AS override_hpd,
+             a.date_from           AS override_from,
+             a.date_to             AS override_to'
+        );
+        $this->db->from(db_prefix() . 'task_assigned ta');
+        $this->db->join(db_prefix() . 'tasks t',   't.id = ta.taskid', 'inner');
+        $this->db->join(db_prefix() . 'projects p', 'p.id = t.rel_id AND t.rel_type = \'project\'', 'left');
+        $this->db->join(db_prefix() . 'staff s',   's.staffid = ta.staffid', 'inner');
+        // Optional override record
+        $this->db->join(
+            db_prefix() . 'rb_allocations a',
+            'a.task_id = t.id AND a.staff_id = ta.staffid',
+            'left'
+        );
+
+        // Date window: task must overlap [date_from, date_to]
+        $df = $this->db->escape_str($date_from);
+        $dt = $this->db->escape_str($date_to);
+        $this->db->where(
+            "(COALESCE(a.date_from, t.startdate) <= '{$dt}'
+              AND COALESCE(a.date_to, t.duedate) >= '{$df}')"
+        );
+
+        if ($staff_id)   $this->db->where('ta.staffid',  (int)$staff_id);
+        if ($project_id) $this->db->where('p.id',        (int)$project_id);
+
+        $this->db->order_by('p.name, t.duedate, t.name');
+        $rows = $this->db->get()->result_array();
+
+        $result = [];
+        foreach ($rows as $row) {
+            $start = $row['override_from'] ?: $row['task_start'];
+            $end   = $row['override_to']   ?: $row['task_due'];
+            if (!$start || !$end) continue;
+
+            // Clip to report window
+            $eff_start = max($start, $date_from);
+            $eff_end   = min($end,   $date_to);
+            $working_days = rb_count_working_days($eff_start, $eff_end);
+
+            $est    = $row['estimated_hours'] !== null ? (float)$row['estimated_hours'] : null;
+            $hpd    = $row['override_hpd'] !== null
+                    ? (float)$row['override_hpd']
+                    : ($est && $working_days > 0 ? round($est / $working_days, 1) : 8.0);
+            $alloc_h = round($hpd * $working_days, 1);
+
+            $result[] = [
+                'task_id'        => (int)$row['task_id'],
+                'task_name'      => $row['task_name'],
+                'task_status'    => (int)$row['task_status'],
+                'task_start'     => $start,
+                'task_due'       => $end,
+                'project_id'     => $row['project_id'] ? (int)$row['project_id'] : null,
+                'project_name'   => $row['project_name'] ?: '—',
+                'project_color'  => $row['project_color'] ? rb_project_color((int)$row['project_id']) : '#95a5a6',
+                'staff_id'       => (int)$row['staffid'],
+                'staff_name'     => trim($row['firstname'] . ' ' . $row['lastname']),
+                'estimated_hours'=> $est,
+                'hours_per_day'  => $hpd,
+                'allocated_hours'=> $alloc_h,
+                'working_days'   => $working_days,
+                'has_override'   => !empty($row['override_id']),
+            ];
+        }
+
+        return $result;
+    }
 }

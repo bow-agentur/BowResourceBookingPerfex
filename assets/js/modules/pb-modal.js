@@ -314,9 +314,11 @@ var PB_Modal = (function () {
             alert_float('warning', 'Gleicher Mitarbeiter – bitte anderen wählen');
             return;
         }
-        var confirmMsg = 'Task von "' + alloc.staff_id + '" entfernen und "' + newStaffId + '" zuweisen?';
+        var staffName = $('#rb-alloc-staff option:selected').text().trim();
+        var confirmMsg = 'Task neu zuweisen an "' + staffName + '" (vorherige Person wird entfernt)?';
         if (!confirm(confirmMsg)) return;
 
+        var isNumericId = /^\d+$/.test(String(id));
         var errLang = (_cfg.lang && _cfg.lang.errorSaving) || 'Fehler beim Speichern';
 
         // Step 1: remove old person from task
@@ -337,7 +339,7 @@ var PB_Modal = (function () {
                             alert_float('danger', (r && r.error) || errLang);
                             return;
                         }
-                        // Step 3: move the override (upsert with new staff_id)
+                        // Step 3: upsert override for new person
                         $.ajax({
                             url:  _cfg.apiUrl + '/api_upsert_override',
                             type: 'POST',
@@ -353,13 +355,15 @@ var PB_Modal = (function () {
                             },
                             dataType: 'json',
                             success: function () {
-                                // Remove old override record
-                                $.ajax({
-                                    url:  _cfg.apiUrl + '/api_allocation/' + id,
-                                    type: 'POST',
-                                    data: { _method: 'DELETE' },
-                                    dataType: 'json'
-                                });
+                                // Step 4: delete old override only if it was a real DB record
+                                if (isNumericId) {
+                                    $.ajax({
+                                        url:  _cfg.apiUrl + '/api_allocation/' + id,
+                                        type: 'POST',
+                                        data: { _method: 'DELETE' },
+                                        dataType: 'json'
+                                    });
+                                }
                                 $('#rb-allocation-modal').modal('hide');
                                 alert_float('success', 'Umgebucht');
                                 _reload();
@@ -388,6 +392,7 @@ var PB_Modal = (function () {
         var name = ($('#rb-alloc-staff option:selected').text() || 'Person').trim();
         if (!confirm(name + ' vom Task entfernen?')) return;
 
+        var isNumericId = /^\d+$/.test(String(id));
         var errLang = (_cfg.lang && _cfg.lang.errorSaving) || 'Fehler';
         $.ajax({
             url:      _cfg.apiUrl + '/api_remove_member',
@@ -395,8 +400,8 @@ var PB_Modal = (function () {
             data:     { staff_id: alloc.staff_id, task_id: alloc.task_id, project_id: alloc.project_id || '' },
             dataType: 'json',
             success: function () {
-                // Also remove the override record
-                if (id) {
+                // Only delete the DB override record if it has a real numeric ID
+                if (isNumericId) {
                     $.ajax({
                         url:  _cfg.apiUrl + '/api_allocation/' + id,
                         type: 'POST',

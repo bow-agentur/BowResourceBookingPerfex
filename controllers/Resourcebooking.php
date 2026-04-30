@@ -97,6 +97,7 @@ class Resourcebooking extends AdminController
     $data['title']    = _l('rb_reports');
     $data['staff']    = $staff;
     $data['time_off'] = $time_off;
+    $data['projects'] = $this->rb_planning_model->get_active_projects();
 
     $this->load->view('reports', $data);
   }
@@ -448,6 +449,7 @@ class Resourcebooking extends AdminController
       $date_from = $this->input->get('start_date') ?: date('Y-m-01');
       $date_to   = $this->input->get('end_date') ?: date('Y-m-t');
       $staff_id  = $this->input->get('staff_id') ?: null;
+      $project_id = $this->input->get('project_id') ?: null;
 
       $filters = $staff_id ? ['staff_ids' => [$staff_id]] : [];
       $staff_list = $this->rb_planning_model->get_staff_with_capacity($date_from, $date_to, $filters);
@@ -482,6 +484,7 @@ class Resourcebooking extends AdminController
       }
       
       $project_hours = $this->rb_planning_model->get_allocations_by_project($date_from, $date_to, $staff_id);
+      $task_details  = $this->rb_planning_model->get_tasks_for_report($date_from, $date_to, $staff_id, $project_id);
       $time_off_summary = $this->rb_planning_model->get_time_off_summary($date_from, $date_to, $staff_id);
 
       echo json_encode([
@@ -498,6 +501,7 @@ class Resourcebooking extends AdminController
           ],
           'staff_summary' => $staff_summary,
           'project_hours' => $project_hours,
+          'task_details'  => $task_details,
           'time_off_summary' => $time_off_summary
         ]
       ]);

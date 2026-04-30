@@ -145,11 +145,13 @@ var PlanningBoard = (function () {
         });
 
         // Double-click on allocation bar → edit modal (admin only)
+        // Note: rawId can be a numeric override ID (e.g. 42) or a synthetic task ID
+        // (e.g. "t_5_123") — we open the modal for both cases.
         if (!config.isEmployee) {
             $('#rb-board-body').on('dblclick', '.rb-allocation[data-id]', function (e) {
                 e.stopPropagation();
                 var rawId = $(this).data('id');
-                if (typeof rawId === 'number' || /^\d+$/.test(String(rawId))) {
+                if (rawId !== undefined && rawId !== null && rawId !== '') {
                     PB_Modal.openAllocationModal(rawId);
                 }
             });
