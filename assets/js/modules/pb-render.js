@@ -364,12 +364,13 @@ var PB_Render = (function () {
 
         if (isOver) h += '<i class="fa fa-exclamation-triangle rb-overbooking-icon"></i> ';
 
-        if (width > 20) {
+        // Project bars are thin ribbons — no text (tooltip handles identification)
+        if (isTask && width > 20) {
             h += '<span class="rb-bar-label">'
                + PB_Utils.escHtml(width > 60 ? barLabel : '') + '</span>';
         }
 
-        if (hoursLabel && width > 80) {
+        if (isTask && hoursLabel && width > 80) {
             if (isTask && alloc.estimated_hours && _cfg.canEdit) {
                 h += '<span class="rb-bar-hours rb-inline-editable" '
                    + 'data-task-id="' + alloc.task_id + '" '

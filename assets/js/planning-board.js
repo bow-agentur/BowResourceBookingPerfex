@@ -213,7 +213,11 @@ var PlanningBoard = (function () {
         var from = $('#rb-date-from').val();
         var to   = $('#rb-date-to').val();
         if (!from || !to) return;
-        var s = new Date(from), e = new Date(to);
+        // Parse as local midnight — new Date('YYYY-MM-DD') parses as UTC midnight
+        // which shifts dates back 1 day in UTC+ timezones.
+        var fp = from.split('-'), tp = to.split('-');
+        var s  = new Date(+fp[0], +fp[1] - 1, +fp[2]);
+        var e  = new Date(+tp[0], +tp[1] - 1, +tp[2]);
         if (s > e) { alert_float('warning', 'Startdatum muss vor Enddatum liegen'); return; }
         state.startDate = s;
         state.endDate   = e;

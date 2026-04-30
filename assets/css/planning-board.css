@@ -80,6 +80,7 @@
 
 .rb-dates-scroll {
     display: flex;
+    flex-direction: column;  /* stack month-row above day-row */
     overflow-x: hidden;
     flex: 1;
 }
@@ -783,7 +784,7 @@
 }
 
 /* Lane type variants */
-.rb-project-lane  { min-height: 34px; }
+.rb-project-lane  { min-height: 22px; }   /* ribbon-only lane */
 .rb-task-lane     { min-height: 28px; background: rgba(91,163,217,0.04); }
 .rb-timeoff-lane  { min-height: 26px; background: rgba(243,156,18,0.04); }
 .rb-empty-lane    { min-height: 32px; }
@@ -921,9 +922,17 @@
     user-select: none;
 }
 
+/* Project bars: thin presence ribbon — context only, not capacity */
 .rb-project-bar {
-    height: 26px;
-    top: 4px;
+    height: 8px;
+    top: 6px;
+    border-radius: 3px;
+    opacity: 0.60;
+    box-shadow: none;
+}
+.rb-project-bar:hover {
+    opacity: 0.85;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.18);
 }
 
 .rb-task-bar {
