@@ -322,6 +322,7 @@ var PlanningBoard = (function () {
                     });
                     state.holidayDates = hSet;
 
+                    PB_Render.renderBoard();
                     PB_Render.checkOverbooking();
                     if (config.canEdit) PB_Drag.initDragDrop();
                 } else {
