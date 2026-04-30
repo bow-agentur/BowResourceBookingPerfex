@@ -8,10 +8,25 @@ var PB_Utils = (function () {
     'use strict';
 
     /**
+     * Parse a Date object or 'YYYY-MM-DD' string as LOCAL midnight.
+     * Native new Date('YYYY-MM-DD') parses as UTC midnight, causing a day
+     * shift in positive-offset timezones (e.g. UTC+2 → previous day).
+     */
+    function _parseDateSafe(d) {
+        if (d instanceof Date) return new Date(d);
+        var s = String(d);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+            var p = s.split('-');
+            return new Date(+p[0], +p[1] - 1, +p[2]);
+        }
+        return new Date(s);
+    }
+
+    /**
      * Format a Date object or parseable string as 'YYYY-MM-DD'.
      */
     function formatDate(date) {
-        var d   = new Date(date);
+        var d   = _parseDateSafe(date);
         var m   = '' + (d.getMonth() + 1);
         var day = '' + d.getDate();
         if (m.length < 2)   m   = '0' + m;
@@ -27,8 +42,8 @@ var PB_Utils = (function () {
      */
     function getDateRange(start, end, includeWeekends) {
         var dates = [];
-        var cur   = new Date(start);
-        var endD  = new Date(end);
+        var cur   = _parseDateSafe(start);
+        var endD  = _parseDateSafe(end);
         while (cur <= endD) {
             var dow = cur.getDay();
             if (includeWeekends || (dow !== 0 && dow !== 6)) {
@@ -49,8 +64,8 @@ var PB_Utils = (function () {
     /** Count Mon–Fri days between start and end (inclusive). */
     function countWorkingDays(start, end) {
         var n = 0;
-        var c = new Date(start);
-        var e = new Date(end);
+        var c = _parseDateSafe(start);
+        var e = _parseDateSafe(end);
         while (c <= e) {
             var d = c.getDay();
             if (d !== 0 && d !== 6) n++;

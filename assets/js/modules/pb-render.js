@@ -156,7 +156,8 @@ var PB_Render = (function () {
         if (isOwn && allocs.length) {
             var chips = allocs.slice(0, 3).map(function (a) {
                 var label = a.type === 'task' ? (a.task_name || 'Task') : (a.project_name || 'Projekt');
-                var h     = a.hours_per_day ? ' · ' + a.hours_per_day + 'h/d' : '';
+                var showH = a.type === 'task' ? a.hours_per_day : (a.is_override && a.hours_per_day > 0 ? a.hours_per_day : 0);
+                var h     = showH ? ' · ' + showH + 'h/d' : '';
                 return '<span class="rb-goal-chip">' + PB_Utils.escHtml(label + h) + '</span>';
             });
             if (allocs.length > 3) {
@@ -332,7 +333,11 @@ var PB_Render = (function () {
                        : alloc.estimated_hours ? alloc.estimated_hours + 'h'
                        : '';
         } else {
-            hoursLabel = alloc.hours_per_day ? alloc.hours_per_day + 'h/d' : '';
+            // Project bars are presence-only indicators — only show hours if
+            // the user explicitly set an override with a non-zero hours value.
+            hoursLabel = (alloc.is_override && alloc.hours_per_day > 0)
+                ? alloc.hours_per_day + 'h/d'
+                : '';
         }
 
         var barLabel = isTask ? (alloc.task_name || 'Task') : (alloc.project_name || 'Projekt');
@@ -440,6 +445,7 @@ var PB_Render = (function () {
     function _calcStaffTotalHours(allocs, visibleDates) {
         var total = 0;
         allocs.forEach(function (a) {
+            if (a.type !== 'task') return; // projects are presence-only, no capacity hours
             PB_Utils.getDateRange(a.start_date, a.end_date, false).forEach(function (d) {
                 if (visibleDates.indexOf(d) !== -1) total += parseFloat(a.hours_per_day) || 0;
             });

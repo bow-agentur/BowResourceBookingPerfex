@@ -612,24 +612,19 @@ class Rb_planning_model extends App_Model
     /**
      * Get allocations indexed by staff_id and date (summed hours per day)
      * v2.0: reads live from project_members + task_assigned, not just rb_allocations
+     *
+     * Projects are PRESENCE-ONLY indicators and do NOT contribute to capacity.
+     * Only task assignments consume capacity.
      */
     private function get_allocations_indexed($staff_ids, $date_from, $date_to)
     {
-        // Build live board allocations (re-use get_board_data logic minimally)
-        $project_allocs = [];
-        $task_allocs    = [];
+        // Task assignments only — real capacity consumers
+        $has_estimated = $this->db->field_exists('estimated_hours', db_prefix() . 'tasks');
+        $task_select   = 'ta.staffid AS staff_id, t.startdate AS date_from, t.duedate AS date_to, '
+                       . 'a.hours_per_day AS override_hpd, COALESCE(a.include_weekends, 0) AS include_weekends'
+                       . ($has_estimated ? ', t.estimated_hours' : ', NULL AS estimated_hours');
 
-        // Project memberships
-        $this->db->select('pm.staff_id, p.start_date AS date_from, p.deadline AS date_to, COALESCE(a.hours_per_day, 8) AS hours_per_day, COALESCE(a.include_weekends, 0) AS include_weekends')
-            ->from(db_prefix() . 'project_members pm')
-            ->join(db_prefix() . 'projects p', 'p.id = pm.project_id')
-            ->join($this->table_allocations . ' a', 'a.staff_id = pm.staff_id AND a.project_id = pm.project_id AND (a.task_id IS NULL OR a.task_id = 0)', 'left')
-            ->where_in('pm.staff_id', $staff_ids)
-            ->where('p.status !=', 4);
-        $project_allocs = $this->db->get()->result_array();
-
-        // Task assignments
-        $this->db->select('ta.staffid AS staff_id, t.startdate AS date_from, t.duedate AS date_to, COALESCE(a.hours_per_day, 0) AS hours_per_day, COALESCE(a.include_weekends, 0) AS include_weekends')
+        $this->db->select($task_select)
             ->from(db_prefix() . 'task_assigned ta')
             ->join(db_prefix() . 'tasks t', 't.id = ta.taskid')
             ->join($this->table_allocations . ' a', 'a.staff_id = ta.staffid AND a.task_id = ta.taskid', 'left')
@@ -638,18 +633,30 @@ class Rb_planning_model extends App_Model
             ->where('t.status !=', 5);
         $task_allocs = $this->db->get()->result_array();
 
-        $all_allocs = array_merge($project_allocs, $task_allocs);
-
         $indexed = [];
 
-        foreach ($all_allocs as $alloc) {
+        foreach ($task_allocs as $alloc) {
             if (empty($alloc['date_from']) || empty($alloc['date_to'])) continue;
 
             $staff_id = $alloc['staff_id'];
-            $start    = new DateTime($alloc['date_from']);
-            $end      = (new DateTime($alloc['date_to']))->modify('+1 day');
-            $period   = new DatePeriod($start, new DateInterval('P1D'), $end);
-            
+
+            // Determine hours per day for capacity:
+            // 1. Explicit override hours_per_day
+            // 2. estimated_hours / working_days
+            // 3. Default 8h
+            if (!empty($alloc['override_hpd'])) {
+                $hpd = (float)$alloc['override_hpd'];
+            } elseif (!empty($alloc['estimated_hours'])) {
+                $wd  = rb_count_working_days($alloc['date_from'], $alloc['date_to']);
+                $hpd = $wd > 0 ? round((float)$alloc['estimated_hours'] / $wd, 2) : 8.0;
+            } else {
+                $hpd = 8.0;
+            }
+
+            $start  = new DateTime($alloc['date_from']);
+            $end    = (new DateTime($alloc['date_to']))->modify('+1 day');
+            $period = new DatePeriod($start, new DateInterval('P1D'), $end);
+
             $include_weekends = !empty($alloc['include_weekends']);
 
             foreach ($period as $date) {
@@ -659,11 +666,10 @@ class Rb_planning_model extends App_Model
                     if (!$include_weekends && ($dow == 0 || $dow == 6)) {
                         continue;
                     }
-                    
                     if (!isset($indexed[$staff_id][$day_str])) {
                         $indexed[$staff_id][$day_str] = 0;
                     }
-                    $indexed[$staff_id][$day_str] += (float)$alloc['hours_per_day'];
+                    $indexed[$staff_id][$day_str] += $hpd;
                 }
             }
         }
@@ -870,7 +876,7 @@ class Rb_planning_model extends App_Model
                 'date_to'         => $dt,
                 'start_date'      => $df,
                 'end_date'        => $dt,
-                'hours_per_day'   => !empty($row['hours_per_day']) ? (float)$row['hours_per_day'] : 8.0,
+                'hours_per_day'   => (!empty($row['allocation_id']) && $row['hours_per_day'] !== null) ? (float)$row['hours_per_day'] : 0.0,
                 'note'            => $row['note'],
                 'include_weekends'=> !empty($row['include_weekends']) ? 1 : 0,
                 'type'            => 'project',
