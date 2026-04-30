@@ -885,6 +885,13 @@ class Rb_planning_model extends App_Model
 
             $working_days = rb_count_working_days($df, $dt);
             $est_hours    = !empty($row['estimated_hours']) ? (float)$row['estimated_hours'] : null;
+
+            // Fallback: if no estimated_hours on the task, derive from span × default daily hours
+            $default_hpd = 8.0;
+            if ($est_hours === null && $working_days > 0) {
+                $est_hours = round($working_days * $default_hpd, 1);
+            }
+
             $daily_avg    = null;
             if ($est_hours && $working_days > 0) {
                 $daily_avg = round($est_hours / $working_days, 1);

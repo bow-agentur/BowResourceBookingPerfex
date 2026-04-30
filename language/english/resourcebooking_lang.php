@@ -230,3 +230,4 @@ $lang['no_records_found']           = 'No records found';
 $lang['hours_use']                  = 'Hours used';
 $lang['total_hours_auto_hint']      = 'Set total hours to auto-calculate hours/day';
 $lang['hours_per_day']              = 'Hours per day';
+$lang['estimated_hours_planning_hint'] = 'Used by the Planning Board. Leave empty to use task span x 8h/day.';
