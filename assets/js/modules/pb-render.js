@@ -22,6 +22,7 @@ var PB_Render = (function () {
     'use strict';
 
     var _cfg = {}, _st = {};
+    var CAPACITY_H = 64; // px — full lane height = 8 h/day visual scale
 
     function setContext(config, state) {
         _cfg = config;
@@ -140,8 +141,6 @@ var PB_Render = (function () {
         var taskAllocs = allocs.filter(function (a) { return a.type === 'task'; })
                                .sort(function (a, b) { return a.start_date > b.start_date ? 1 : -1; });
 
-        var projLanes   = _packLanes(projAllocs);
-        var taskLanes   = _packLanes(taskAllocs);
         var timeOffList = _st.timeOff.filter(function (t) {
             return String(t.staff_id) === String(staffId);
         });
@@ -201,21 +200,13 @@ var PB_Render = (function () {
         // ── Collapsible lanes ─────────────────────────────────────────────────
         html += '<div class="rb-lanes-wrapper">';
 
+        // Time off sits in its own thin lane above the capacity area
         if (timeOffList.length) {
             html += _buildLane('rb-timeoff-lane', staffId, [], timeOffList);
         }
 
-        projLanes.forEach(function (lane) {
-            html += _buildLane('rb-project-lane', staffId, lane, []);
-        });
-
-        taskLanes.forEach(function (lane) {
-            html += _buildLane('rb-task-lane', staffId, lane, []);
-        });
-
-        if (!projLanes.length && !taskLanes.length && !timeOffList.length) {
-            html += _buildLane('rb-empty-lane', staffId, [], []);
-        }
+        // Single capacity lane: project backgrounds + proportional task bars
+        html += _buildCapacityLane(staffId, projAllocs, taskAllocs);
 
         html += '</div>'; // .rb-lanes-wrapper
         html += '</div>'; // .rb-staff-group
@@ -233,6 +224,58 @@ var PB_Render = (function () {
         timeOffBars.forEach(function (t) { h += _renderTimeOffBar(t); });
         h += '</div></div>';
         return h;
+    }
+
+    /**
+     * Build the capacity lane: project-colour backgrounds + proportional task bars.
+     * Height = CAPACITY_H (64 px = 8 h). Bars are bottom-aligned so empty space
+     * at the top visualises spare capacity for that day.
+     */
+    function _buildCapacityLane(staffId, projAllocs, taskAllocs) {
+        var h = '<div class="rb-lane rb-capacity-lane">';
+        h += '<div class="rb-lane-stub rb-capacity-stub">';
+        h += '<span class="rb-capacity-scale">8h</span>';
+        h += '</div>';
+        h += '<div class="rb-lane-cells rb-capacity-cells">';
+        h += _renderDayCells(staffId, false);
+        // Project backgrounds (behind tasks, z-index 0)
+        projAllocs.forEach(function (p) { h += _renderProjectBg(p); });
+        // Task bars (proportional height, z-index 2)
+        taskAllocs.forEach(function (t) { h += _renderAllocationBar(t); });
+        h += '</div></div>';
+        return h;
+    }
+
+    /**
+     * Render a project as a full-height translucent background band.
+     * Not a clickable bar — just visual context for which project covers which days.
+     */
+    function _renderProjectBg(alloc) {
+        var dates    = PB_Utils.getDateRange(_st.startDate, _st.endDate, true);
+        var visStart = PB_Utils.formatDate(_st.startDate);
+        var visEnd   = PB_Utils.formatDate(_st.endDate);
+
+        var sd = alloc.start_date < visStart ? visStart : alloc.start_date;
+        var ed = alloc.end_date   > visEnd   ? visEnd   : alloc.end_date;
+        if (ed < visStart || sd > visEnd) return '';
+
+        var si = -1, ei = -1;
+        for (var x = 0; x < dates.length; x++) {
+            if (si === -1 && dates[x] >= sd) si = x;
+            if (dates[x] <= ed) ei = x;
+        }
+        if (si === -1 || ei === -1 || ei < si) return '';
+
+        var left  = si * _st.cellWidth;
+        var width = (ei - si + 1) * _st.cellWidth;
+        var color = alloc.project_color || '#95a5a6';
+
+        return '<div class="rb-project-bg" '
+            + 'title="' + PB_Utils.escHtml(alloc.project_name || 'Projekt') + '" '
+            + 'data-project-id="' + (alloc.project_id || '') + '" '
+            + 'data-staff-id="'   + alloc.staff_id           + '" '
+            + 'style="left:' + left + 'px;width:' + width + 'px;'
+            + 'background-color:' + color + '"></div>';
     }
 
     /** Generate day-cell divs for the full visible date range. */
@@ -299,6 +342,9 @@ var PB_Render = (function () {
     // =========================================================================
 
     function _renderAllocationBar(alloc) {
+        // Projects are rendered as background bands by _renderProjectBg, not here
+        if (alloc.type !== 'task') return '';
+
         var dates    = PB_Utils.getDateRange(_st.startDate, _st.endDate, true);
         var visStart = PB_Utils.formatDate(_st.startDate);
         var visEnd   = PB_Utils.formatDate(_st.endDate);
@@ -316,62 +362,59 @@ var PB_Render = (function () {
         if (si === -1 || ei === -1 || ei < si) return '';
 
         var left  = si * _st.cellWidth;
-        var width = (ei - si + 1) * _st.cellWidth - 4;
+        var width = (ei - si + 1) * _st.cellWidth - 2;
 
-        var isTask      = alloc.type === 'task';
-        var color       = alloc.project_color || (isTask ? '#5ba3d9' : '#3498db');
-        var textColor   = PB_Utils.isLightColor(color) ? '#333' : '#fff';
-        var isOver      = _checkAllocationOverbooking(alloc);
+        // ── Proportional height: 8 h/day = full lane, spare capacity visible at top ──
+        var usable = CAPACITY_H - 8;  // 56 px = 8 h (4 px padding top + bottom)
+        var hpd    = parseFloat(alloc.hours_per_day) || 8;
+        var barH   = Math.max(Math.round(hpd / 8 * usable), 6); // min 6 px
+        var barTop = CAPACITY_H - 4 - barH; // bottom-aligned
+
+        var color     = alloc.project_color || '#5ba3d9';
+        var textColor = PB_Utils.isLightColor(color) ? '#333' : '#fff';
+        var isOver    = _checkAllocationOverbooking(alloc);
 
         var rawId       = alloc.id;
         var isNumericId = typeof rawId === 'number' || /^\d+$/.test(String(rawId));
 
-        // Hours label: prefer server-computed daily_avg, then hours_per_day
-        var hoursLabel;
-        if (isTask) {
-            hoursLabel = alloc.daily_avg       ? alloc.daily_avg + 'h/d'
+        var hoursLabel = alloc.daily_avg       ? alloc.daily_avg + 'h/d'
                        : alloc.estimated_hours ? alloc.estimated_hours + 'h'
-                       : '';
-        } else {
-            // Project bars are presence-only indicators — only show hours if
-            // the user explicitly set an override with a non-zero hours value.
-            hoursLabel = (alloc.is_override && alloc.hours_per_day > 0)
-                ? alloc.hours_per_day + 'h/d'
-                : '';
-        }
+                       : (hpd ? hpd + 'h/d' : '');
 
-        var barLabel = isTask ? (alloc.task_name || 'Task') : (alloc.project_name || 'Projekt');
+        var barLabel = alloc.task_name || 'Task';
         var tooltip  = PB_Utils.escHtml(
             barLabel
-            + (hoursLabel          ? ' · ' + hoursLabel  : '')
-            + (alloc.note          ? ' — ' + alloc.note  : '')
+            + (hoursLabel   ? ' · ' + hoursLabel : '')
+            + (alloc.note   ? ' \u2014 ' + alloc.note  : '')
         );
 
-        var cls = 'rb-allocation ' + (isTask ? 'rb-task-bar' : 'rb-project-bar');
+        var cls = 'rb-allocation rb-task-bar';
         if (isOver) cls += ' rb-allocation-overbooked';
 
         var h = '<div class="' + cls + '" '
-            + 'data-id="'         + rawId                   + '" '
-            + 'data-type="'       + alloc.type              + '" '
-            + 'data-staff-id="'   + alloc.staff_id          + '" '
-            + 'data-project-id="' + (alloc.project_id || '') + '" '
-            + 'data-task-id="'    + (alloc.task_id    || '') + '" '
-            + 'data-start="'      + alloc.start_date        + '" '
-            + 'data-end="'        + alloc.end_date          + '" '
-            + 'title="'           + tooltip                 + '" '
-            + 'style="left:'      + left  + 'px;width:' + width + 'px;'
-            + 'background-color:' + color + ';color:'    + textColor + '">';
+            + 'data-id="'         + rawId                    + '" '
+            + 'data-type="task" '
+            + 'data-staff-id="'   + alloc.staff_id           + '" '
+            + 'data-project-id="' + (alloc.project_id  || '') + '" '
+            + 'data-task-id="'    + (alloc.task_id     || '') + '" '
+            + 'data-start="'      + alloc.start_date         + '" '
+            + 'data-end="'        + alloc.end_date           + '" '
+            + 'title="'           + tooltip                  + '" '
+            + 'style="left:'      + left   + 'px;'
+            + 'width:'            + width  + 'px;'
+            + 'height:'           + barH   + 'px;'
+            + 'top:'              + barTop + 'px;'
+            + 'background-color:' + color  + ';color:' + textColor + '">';
 
         if (isOver) h += '<i class="fa fa-exclamation-triangle rb-overbooking-icon"></i> ';
 
-        // Project bars are thin ribbons — no text (tooltip handles identification)
-        if (isTask && width > 20) {
+        if (width > 20) {
             h += '<span class="rb-bar-label">'
                + PB_Utils.escHtml(width > 60 ? barLabel : '') + '</span>';
         }
 
-        if (isTask && hoursLabel && width > 80) {
-            if (isTask && alloc.estimated_hours && _cfg.canEdit) {
+        if (hoursLabel && width > 70) {
+            if (alloc.estimated_hours && _cfg.canEdit) {
                 h += '<span class="rb-bar-hours rb-inline-editable" '
                    + 'data-task-id="' + alloc.task_id + '" '
                    + 'data-hours="'   + (alloc.estimated_hours || '') + '">'

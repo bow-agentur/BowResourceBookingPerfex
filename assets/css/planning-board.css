@@ -790,6 +790,30 @@
 .rb-empty-lane    { min-height: 32px; }
 
 /* --------------------------------------------------------------------------
+   Capacity lane: single lane per staff, height = 8 h scale
+   -------------------------------------------------------------------------- */
+.rb-capacity-lane {
+    min-height: 64px;
+}
+.rb-capacity-lane .rb-lane-cells {
+    height: 64px;
+    min-height: 64px;
+}
+.rb-capacity-stub {
+    display: flex;
+    align-items: flex-start;   /* label at top = full capacity mark */
+    justify-content: flex-end;
+    padding-top: 4px;
+    padding-right: 6px;
+}
+.rb-capacity-scale {
+    font-size: 9px;
+    color: #bbb;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+/* --------------------------------------------------------------------------
    Staff info (name, utilisation, goal chips)
    -------------------------------------------------------------------------- */
 .rb-staff-info {
@@ -935,12 +959,28 @@
     box-shadow: 0 1px 4px rgba(0,0,0,0.18);
 }
 
+/* Project backgrounds: full-height translucent band behind tasks */
+.rb-project-bg {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    opacity: 0.12;
+    z-index: 0;
+    pointer-events: auto;
+    cursor: default;
+    border-radius: 0;
+    transition: opacity 0.15s;
+}
+.rb-project-bg:hover {
+    opacity: 0.22;
+}
+
 .rb-task-bar {
-    height: 20px;
-    top: 4px;
+    /* height and top are set inline (proportional to hours_per_day) */
     font-size: 10px;
     border-radius: 3px;
-    opacity: 0.90;
+    opacity: 0.92;
+    z-index: 2;
 }
 
 .rb-allocation:hover {
