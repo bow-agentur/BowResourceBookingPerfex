@@ -1163,3 +1163,90 @@
     line-height: 1;
 }
 #rb-board-overbooking-warning .rb-board-overbooking-close:hover { color: #555; }
+
+/* --------------------------------------------------------------------------
+   Calendar-week row in the date header
+   -------------------------------------------------------------------------- */
+.rb-kw-row {
+    display: flex;
+    background: #e8edf3;
+    border-bottom: 1px solid #d8dde4;
+}
+.rb-kw-cell {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: #789;
+    text-transform: uppercase;
+    padding: 2px 4px;
+    border-right: 1px solid #d8dde4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   Weekly utilization chips inside the staff left panel
+   -------------------------------------------------------------------------- */
+.rb-weekly-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    margin-top: 3px;
+}
+.rb-kw-chip {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+    cursor: default;
+    opacity: 0.88;
+}
+/* Reuse utilisation colour classes */
+.rb-kw-chip.rb-util-empty   { background: #ecf0f1; color: #7f8c8d; }
+.rb-kw-chip.rb-util-low     { background: #d5f5e3; color: #1d7838; }
+.rb-kw-chip.rb-util-mid     { background: #fef9e7; color: #9a6e00; }
+.rb-kw-chip.rb-util-high    { background: #fdebd0; color: #af4d0a; }
+.rb-kw-chip.rb-util-over    { background: #fadbd8; color: #922b21; }
+
+/* --------------------------------------------------------------------------
+   Daily capacity hover tooltip
+   -------------------------------------------------------------------------- */
+.rb-cell-tooltip {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    background: #fff;
+    border: 1px solid #cdd4db;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 7px 11px;
+    font-size: 11px;
+    line-height: 1.6;
+    min-width: 140px;
+}
+.rb-tip-date {
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 3px;
+}
+.rb-tip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: #555;
+}
+.rb-tip-row span { color: #888; }
+.rb-tip-row.rb-tip-over strong { color: #e74c3c; }
+.rb-tip-warn {
+    margin-top: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #e74c3c;
+}

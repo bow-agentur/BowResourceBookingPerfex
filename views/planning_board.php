@@ -32,8 +32,14 @@
                                     <button type="button" class="btn btn-default rb-view-btn" data-view="week">
                                         <?php echo _l('view_week'); ?>
                                     </button>
+                                    <button type="button" class="btn btn-default rb-view-btn" data-view="2week">
+                                        2 <?php echo _l('view_week'); ?>
+                                    </button>
                                     <button type="button" class="btn btn-default rb-view-btn active" data-view="month">
                                         <?php echo _l('view_month'); ?>
+                                    </button>
+                                    <button type="button" class="btn btn-default rb-view-btn" data-view="2month">
+                                        2 <?php echo _l('view_month'); ?>
                                     </button>
                                 </div>
 
@@ -271,6 +277,13 @@
                     <i class="fa fa-trash"></i> <?php echo _l('delete'); ?>
                 </button>
                 <?php endif; ?>
+                <!-- Shown only when editing an existing task allocation -->
+                <button type="button" class="btn btn-warning pull-left" id="rb-reassign-allocation" style="display:none;">
+                    <i class="fa fa-exchange"></i> <?php echo _l('reassign_task'); ?>
+                </button>
+                <button type="button" class="btn btn-default pull-left" id="rb-remove-person-allocation" style="display:none;">
+                    <i class="fa fa-user-times"></i> <?php echo _l('remove_from_task'); ?>
+                </button>
                 <button type="button" class="btn btn-default" data-dismiss="modal"><?php echo _l('cancel'); ?></button>
                 <button type="button" class="btn btn-primary" id="rb-save-allocation">
                     <?php echo _l('save_allocation'); ?>

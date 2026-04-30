@@ -66,11 +66,18 @@ var PB_Modal = (function () {
             if (_cfg.canDelete) {
                 $('#rb-delete-allocation').show();
             }
+            // Show reassign + remove-person buttons for task allocations
+            if (alloc.type === 'task' && alloc.task_id && _cfg.canEdit) {
+                $('#rb-reassign-allocation').show();
+                $('#rb-remove-person-allocation').show();
+            }
         } else {
             // ── Create new ──────────────────────────────────────────────────
             $('#rb-modal-title').text('Neue Zuweisung');
             $('#rb-alloc-id').val('');
             $('#rb-delete-allocation').hide();
+            $('#rb-reassign-allocation').hide();
+            $('#rb-remove-person-allocation').hide();
 
             if (staffId) $('#rb-alloc-staff').selectpicker('val', String(staffId));
             if (date)    { $('#rb-alloc-start').val(date); $('#rb-alloc-end').val(date); }
@@ -288,6 +295,121 @@ var PB_Modal = (function () {
     }
 
     // =========================================================================
+    // REASSIGN TASK (change person — remove old, add new, move override)
+    // =========================================================================
+
+    function reassignAllocation() {
+        var id    = $('#rb-alloc-id').val();
+        var alloc = _st.allocations.find(function (a) { return String(a.id) === String(id); });
+        if (!alloc || !alloc.task_id) {
+            alert_float('warning', 'Bitte zuerst eine Task-Zuweisung auswählen');
+            return;
+        }
+        var newStaffId = $('#rb-alloc-staff').val();
+        if (!newStaffId) { alert_float('warning', 'Neuen Mitarbeiter wählen'); return; }
+        if (String(newStaffId) === String(alloc.staff_id)) {
+            alert_float('warning', 'Gleicher Mitarbeiter – bitte anderen wählen');
+            return;
+        }
+        var confirmMsg = 'Task von "' + alloc.staff_id + '" entfernen und "' + newStaffId + '" zuweisen?';
+        if (!confirm(confirmMsg)) return;
+
+        var errLang = (_cfg.lang && _cfg.lang.errorSaving) || 'Fehler beim Speichern';
+
+        // Step 1: remove old person from task
+        $.ajax({
+            url:      _cfg.apiUrl + '/api_remove_member',
+            type:     'POST',
+            data:     { staff_id: alloc.staff_id, task_id: alloc.task_id, project_id: alloc.project_id || '' },
+            dataType: 'json',
+            success: function () {
+                // Step 2: add new person to task
+                $.ajax({
+                    url:      _cfg.apiUrl + '/api_assign_member',
+                    type:     'POST',
+                    data:     { staff_id: newStaffId, task_id: alloc.task_id, project_id: alloc.project_id || '' },
+                    dataType: 'json',
+                    success: function (r) {
+                        if (!r || !r.success) {
+                            alert_float('danger', (r && r.error) || errLang);
+                            return;
+                        }
+                        // Step 3: move the override (upsert with new staff_id)
+                        $.ajax({
+                            url:  _cfg.apiUrl + '/api_upsert_override',
+                            type: 'POST',
+                            data: {
+                                staff_id:         newStaffId,
+                                project_id:       $('#rb-alloc-project').val() || null,
+                                task_id:          alloc.task_id,
+                                date_from:        $('#rb-alloc-start').val(),
+                                date_to:          $('#rb-alloc-end').val(),
+                                hours_per_day:    $('#rb-alloc-hours').val(),
+                                include_weekends: $('#rb-alloc-weekends').is(':checked') ? 1 : 0,
+                                note:             $('#rb-alloc-note').val()
+                            },
+                            dataType: 'json',
+                            success: function () {
+                                // Remove old override record
+                                $.ajax({
+                                    url:  _cfg.apiUrl + '/api_allocation/' + id,
+                                    type: 'POST',
+                                    data: { _method: 'DELETE' },
+                                    dataType: 'json'
+                                });
+                                $('#rb-allocation-modal').modal('hide');
+                                alert_float('success', 'Umgebucht');
+                                _reload();
+                            },
+                            error: function () {
+                                $('#rb-allocation-modal').modal('hide');
+                                _reload();
+                            }
+                        });
+                    },
+                    error: function () { alert_float('danger', errLang); }
+                });
+            },
+            error: function () { alert_float('danger', errLang); }
+        });
+    }
+
+    // =========================================================================
+    // REMOVE PERSON FROM TASK (unassign only — keeps task, just removes this person)
+    // =========================================================================
+
+    function removePersonFromTask() {
+        var id    = $('#rb-alloc-id').val();
+        var alloc = _st.allocations.find(function (a) { return String(a.id) === String(id); });
+        if (!alloc || !alloc.task_id) return;
+        var name = ($('#rb-alloc-staff option:selected').text() || 'Person').trim();
+        if (!confirm(name + ' vom Task entfernen?')) return;
+
+        var errLang = (_cfg.lang && _cfg.lang.errorSaving) || 'Fehler';
+        $.ajax({
+            url:      _cfg.apiUrl + '/api_remove_member',
+            type:     'POST',
+            data:     { staff_id: alloc.staff_id, task_id: alloc.task_id, project_id: alloc.project_id || '' },
+            dataType: 'json',
+            success: function () {
+                // Also remove the override record
+                if (id) {
+                    $.ajax({
+                        url:  _cfg.apiUrl + '/api_allocation/' + id,
+                        type: 'POST',
+                        data: { _method: 'DELETE' },
+                        dataType: 'json'
+                    });
+                }
+                $('#rb-allocation-modal').modal('hide');
+                alert_float('success', 'Person entfernt');
+                _reload();
+            },
+            error: function () { alert_float('danger', errLang); }
+        });
+    }
+
+    // =========================================================================
     // TIME-OFF MODAL
     // =========================================================================
 
@@ -450,6 +572,8 @@ var PB_Modal = (function () {
         loadTasksDropdown:       loadTasksDropdown,
         saveAllocation:          saveAllocation,
         deleteAllocation:        deleteAllocation,
+        reassignAllocation:      reassignAllocation,
+        removePersonFromTask:    removePersonFromTask,
         saveTimeOff:             saveTimeOff,
         initInlineEdit:          initInlineEdit,
         initHoursBidirectional:  initHoursBidirectional,

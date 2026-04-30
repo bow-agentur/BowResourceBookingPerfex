@@ -29,6 +29,38 @@ var PB_Render = (function () {
         _st  = state;
     }
 
+    /** Return ISO-8601 week number for a Date object. */
+    function _getISOWeek(date) {
+        var d   = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        var day = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - day);
+        var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    }
+
+    /**
+     * Group an array of 'YYYY-MM-DD' date strings into calendar week buckets.
+     * Returns [{ key, kw, count, dates[] }, …] in order of appearance.
+     */
+    function _groupByWeek(dates) {
+        var result = [], idx = {};
+        dates.forEach(function (d) {
+            var dt  = new Date(d + 'T00:00:00');
+            var kw  = _getISOWeek(dt);
+            var yr  = dt.getFullYear();
+            if (dt.getMonth() === 0  && kw > 50) yr--;
+            if (dt.getMonth() === 11 && kw === 1) yr++;
+            var key = yr + '-' + kw;
+            if (!idx[key]) {
+                idx[key] = { key: key, kw: kw, count: 0, dates: [] };
+                result.push(idx[key]);
+            }
+            idx[key].count++;
+            idx[key].dates.push(d);
+        });
+        return result;
+    }
+
     // =========================================================================
     // PUBLIC ENTRY
     // =========================================================================
@@ -74,6 +106,14 @@ var PB_Render = (function () {
         monthOrder.forEach(function (k) {
             html += '<div class="rb-month-cell" style="width:' + (months[k] * _st.cellWidth) + 'px">'
                   + months[k + '_label'] + '</div>';
+        });
+        html += '</div>';
+
+        // Calendar week row
+        html += '<div class="rb-kw-row">';
+        _groupByWeek(dates).forEach(function (wg) {
+            html += '<div class="rb-kw-cell" style="width:' + (wg.count * _st.cellWidth) + 'px">'
+                  + 'KW\u00a0' + wg.kw + '</div>';
         });
         html += '</div>';
 
@@ -197,6 +237,45 @@ var PB_Render = (function () {
         html += '</div>';
         html += '<div class="rb-staff-util ' + _utilClass(utilPct) + '">'
               + utilPct + '% &bull; ' + totalH + 'h</div>';
+
+        // ── Per-KW utilization chips ────────────────────────────────────────
+        var allDates = PB_Utils.getDateRange(_st.startDate, _st.endDate, true);
+        var weekGroups = _groupByWeek(allDates);
+        // Only show chips when ≤ 8 weeks in view (avoids clutter)
+        if (weekGroups.length <= 8) {
+            var cap = _st.capacity[String(staffId)];
+            var chipHtml = '<div class="rb-weekly-chips">';
+            weekGroups.forEach(function (wg) {
+                var wdDates = wg.dates.filter(function (d) {
+                    var dt = new Date(d + 'T00:00:00');
+                    return dt.getDay() !== 0 && dt.getDay() !== 6
+                        && !(_st.holidayDates && _st.holidayDates[d]);
+                });
+                var wAlloc = 0;
+                taskAllocs.forEach(function (a) {
+                    wdDates.forEach(function (d) {
+                        if (d >= a.start_date && d <= a.end_date) {
+                            wAlloc += parseFloat(a.hours_per_day) || 0;
+                        }
+                    });
+                });
+                var wAvail = 0;
+                if (cap) {
+                    wdDates.forEach(function (d) {
+                        if (cap[d]) wAvail += cap[d].available || 0;
+                    });
+                }
+                var wPct = wAvail > 0 ? Math.round((wAlloc / wAvail) * 100) : 0;
+                var wLbl = wAlloc > 0 ? wAlloc.toFixed(0) + 'h' : '—';
+                chipHtml += '<span class="rb-kw-chip ' + _utilClass(wPct) + '" '
+                    + 'title="KW\u00a0' + wg.kw + ': ' + wAlloc.toFixed(1) + 'h\u00a0/\u00a0'
+                    + wAvail.toFixed(1) + 'h\u00a0verf.">'
+                    + 'KW\u00a0' + wg.kw + '\u00a0' + wPct + '%</span>';
+            });
+            chipHtml += '</div>';
+            html += chipHtml;
+        }
+
         if (ownGoalsHtml) html += ownGoalsHtml;
         html += '</div>'; // .rb-staff-info
         html += '</div>'; // .rb-staff-header-info
@@ -308,7 +387,8 @@ var PB_Render = (function () {
                 else if (cs === 'warn')  cls += ' rb-cell-warn';
             }
             html += '<div class="' + cls + '" data-date="' + date
-                  + '" style="width:' + _st.cellWidth + 'px"></div>';
+                  + '" data-staff-id="' + (staffId || '') + '"'
+                  + ' style="width:' + _st.cellWidth + 'px"></div>';
         });
         return html;
     }

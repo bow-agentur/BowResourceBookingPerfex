@@ -30,7 +30,7 @@ var PlanningBoard = (function () {
     };
 
     var state = {
-        currentView:    'month',   // 'week' | 'month'
+        currentView:    'month',   // 'week' | '2week' | 'month' | '2month'
         startDate:      null,
         endDate:        null,
         staff:          [],
@@ -39,7 +39,7 @@ var PlanningBoard = (function () {
         holidayDates:   {},        // date string → true, for global column highlight
         projects:       [],
         capacity:       {},        // keyed by staffid → date → { available, allocated, status }
-        cellWidth:      40,        // px per day column
+        cellWidth:      40,        // px per day column — recalculated dynamically
         isLoading:      false,
         filterStaff:    null,
         filterProject:  null,
@@ -55,16 +55,7 @@ var PlanningBoard = (function () {
 
         // Default start/end to current month
         var today = new Date();
-        if (state.currentView === 'month') {
-            state.startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-            state.endDate   = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        } else {
-            var day  = today.getDay();
-            var diff = today.getDate() - day + (day === 0 ? -6 : 1);
-            state.startDate = new Date(today.setDate(diff));
-            state.endDate   = new Date(state.startDate);
-            state.endDate.setDate(state.endDate.getDate() + 6);
-        }
+        _setDateRangeForView(today);
 
         // Inject shared context into sub-modules
         PB_Render.setContext(config, state);
@@ -122,9 +113,11 @@ var PlanningBoard = (function () {
         }
 
         // Modal action buttons
-        $('#rb-save-allocation').on('click',  PB_Modal.saveAllocation);
-        $('#rb-save-timeoff').on('click',     PB_Modal.saveTimeOff);
-        $('#rb-delete-allocation').on('click', PB_Modal.deleteAllocation);
+        $('#rb-save-allocation').on('click',           PB_Modal.saveAllocation);
+        $('#rb-save-timeoff').on('click',              PB_Modal.saveTimeOff);
+        $('#rb-delete-allocation').on('click',         PB_Modal.deleteAllocation);
+        $('#rb-reassign-allocation').on('click',       PB_Modal.reassignAllocation);
+        $('#rb-remove-person-allocation').on('click',  PB_Modal.removePersonFromTask);
 
         // Live total hours recalculation in modal
         $('#rb-alloc-start, #rb-alloc-end, #rb-alloc-hours').on(
@@ -191,12 +184,44 @@ var PlanningBoard = (function () {
             $('#rb-board-overbooking-warning').slideUp();
         });
 
-        // Init Bootstrap datepickers
+        // ── Daily capacity hover tooltip on lane cells ───────────────────────
+        var $tip = $('<div id="rb-cell-tooltip" class="rb-cell-tooltip"></div>').appendTo('body');
+        $('#rb-board-body').on('mouseenter', '.rb-capacity-cells .rb-lane-cell', function (e) {
+            var date    = $(this).data('date');
+            var staffId = $(this).closest('.rb-staff-group').data('staff-id');
+            if (!date || !staffId) return;
+            var cap = state.capacity[String(staffId)];
+            if (!cap || !cap[date]) return;
+            var c      = cap[date];
+            var avail  = (c.available  || 0).toFixed(1);
+            var alloc  = (c.allocated  || 0).toFixed(1);
+            var isOver = c.status === 'overbooked';
+            var d      = new Date(date + 'T00:00:00');
+            var dayFmt = d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+            $tip.html(
+                '<div class="rb-tip-date">' + dayFmt + '</div>'
+                + '<div class="rb-tip-row"><span>Verfügbar:</span><strong>' + avail + 'h</strong></div>'
+                + '<div class="rb-tip-row' + (isOver ? ' rb-tip-over' : '') + '">'
+                + '<span>Geplant:</span><strong>' + alloc + 'h</strong></div>'
+                + (isOver ? '<div class="rb-tip-warn">⚠ Überbucht</div>' : '')
+            ).css({ top: e.clientY - $tip.outerHeight() - 8, left: e.clientX + 12 }).show();
+        }).on('mousemove', '.rb-capacity-cells .rb-lane-cell', function (e) {
+            $tip.css({ top: e.clientY - $tip.outerHeight() - 8, left: e.clientX + 12 });
+        }).on('mouseleave', '.rb-capacity-cells .rb-lane-cell', function () {
+            $tip.hide();
+        });
+
+        // Init Bootstrap datepickers ONLY on our specific fields, not by class
+        // (the .datepicker class also triggers jQuery UI datepicker if that library
+        // is loaded, causing a double overlay.)
+        var dpOpts = { format: 'yyyy-mm-dd', autoclose: true, todayHighlight: true };
         if ($.fn.datepicker) {
-            $('.datepicker').datepicker({
-                format:         'yyyy-mm-dd',
-                autoclose:      true,
-                todayHighlight: true
+            $('#rb-date-from, #rb-date-to, #rb-alloc-start, #rb-alloc-end').each(function () {
+                // Destroy any jQuery UI datepicker that may have latched on first
+                if ($.fn.datepicker && $(this).hasClass('hasDatepicker')) {
+                    try { $(this).datepicker('destroy'); } catch(e) {}
+                }
+                $(this).datepicker(dpOpts);
             });
         }
     }
@@ -204,6 +229,48 @@ var PlanningBoard = (function () {
     // =========================================================================
     // NAVIGATION
     // =========================================================================
+
+    /** Set start/end dates based on current view and an anchor date. */
+    function _setDateRangeForView(anchor) {
+        var d = anchor || new Date();
+        switch (state.currentView) {
+            case 'week':
+                var dow  = d.getDay();
+                var diff = d.getDate() - dow + (dow === 0 ? -6 : 1); // Mon
+                state.startDate = new Date(d.getFullYear(), d.getMonth(), diff);
+                state.endDate   = new Date(state.startDate);
+                state.endDate.setDate(state.endDate.getDate() + 6);
+                break;
+            case '2week':
+                var dow2  = d.getDay();
+                var diff2 = d.getDate() - dow2 + (dow2 === 0 ? -6 : 1);
+                state.startDate = new Date(d.getFullYear(), d.getMonth(), diff2);
+                state.endDate   = new Date(state.startDate);
+                state.endDate.setDate(state.endDate.getDate() + 13);
+                break;
+            case '2month':
+                state.startDate = new Date(d.getFullYear(), d.getMonth(), 1);
+                state.endDate   = new Date(d.getFullYear(), d.getMonth() + 2, 0);
+                break;
+            default: // month
+                state.startDate = new Date(d.getFullYear(), d.getMonth(), 1);
+                state.endDate   = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        }
+        _recalcCellWidth();
+    }
+
+    /**
+     * Compute cellWidth so visible columns fill (or closely fill) the board width.
+     * Minimum 28 px/col, maximum 60 px/col.
+     */
+    function _recalcCellWidth() {
+        var totalDays = PB_Utils.getDateRange(state.startDate, state.endDate, true).length;
+        if (!totalDays) { state.cellWidth = 40; return; }
+        var boardW = $('#rb-board-body').width() || ($('.rb-board-container').width() - 200) || 800;
+        var avail  = Math.max(boardW - 200, 200); // subtract staff panel width
+        var cw     = Math.floor(avail / totalDays);
+        state.cellWidth = Math.min(Math.max(cw, 28), 60);
+    }
 
     function _updateDateInputs() {
         $('#rb-date-from').val(PB_Utils.formatDate(state.startDate));
@@ -214,58 +281,51 @@ var PlanningBoard = (function () {
         var from = $('#rb-date-from').val();
         var to   = $('#rb-date-to').val();
         if (!from || !to) return;
-        // Parse as local midnight — new Date('YYYY-MM-DD') parses as UTC midnight
-        // which shifts dates back 1 day in UTC+ timezones.
+        // Parse as local midnight
         var fp = from.split('-'), tp = to.split('-');
         var s  = new Date(+fp[0], +fp[1] - 1, +fp[2]);
         var e  = new Date(+tp[0], +tp[1] - 1, +tp[2]);
         if (s > e) { alert_float('warning', 'Startdatum muss vor Enddatum liegen'); return; }
         state.startDate = s;
         state.endDate   = e;
+        _recalcCellWidth();
         loadBoardData();
     }
 
     function _navigatePrev() {
+        var anchor = new Date(state.startDate);
         if (state.currentView === 'month') {
-            state.startDate.setMonth(state.startDate.getMonth() - 1);
-            state.endDate = new Date(
-                state.startDate.getFullYear(), state.startDate.getMonth() + 1, 0
-            );
-        } else {
-            state.startDate.setDate(state.startDate.getDate() - 7);
-            state.endDate.setDate(state.endDate.getDate() - 7);
+            anchor.setMonth(anchor.getMonth() - 1);
+        } else if (state.currentView === '2month') {
+            anchor.setMonth(anchor.getMonth() - 2);
+        } else if (state.currentView === '2week') {
+            anchor.setDate(anchor.getDate() - 14);
+        } else { // week
+            anchor.setDate(anchor.getDate() - 7);
         }
+        _setDateRangeForView(anchor);
         _updateDateInputs();
         loadBoardData();
     }
 
     function _navigateNext() {
+        var anchor = new Date(state.startDate);
         if (state.currentView === 'month') {
-            state.startDate.setMonth(state.startDate.getMonth() + 1);
-            state.endDate = new Date(
-                state.startDate.getFullYear(), state.startDate.getMonth() + 1, 0
-            );
-        } else {
-            state.startDate.setDate(state.startDate.getDate() + 7);
-            state.endDate.setDate(state.endDate.getDate() + 7);
+            anchor.setMonth(anchor.getMonth() + 1);
+        } else if (state.currentView === '2month') {
+            anchor.setMonth(anchor.getMonth() + 2);
+        } else if (state.currentView === '2week') {
+            anchor.setDate(anchor.getDate() + 14);
+        } else { // week
+            anchor.setDate(anchor.getDate() + 7);
         }
+        _setDateRangeForView(anchor);
         _updateDateInputs();
         loadBoardData();
     }
 
     function _navigateToday() {
-        var today = new Date();
-        if (state.currentView === 'month') {
-            state.startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-            state.endDate   = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        } else {
-            var day  = today.getDay();
-            var diff = today.getDate() - day + (day === 0 ? -6 : 1);
-            state.startDate = new Date(today);
-            state.startDate.setDate(diff);
-            state.endDate   = new Date(state.startDate);
-            state.endDate.setDate(state.endDate.getDate() + 6);
-        }
+        _setDateRangeForView(new Date());
         _updateDateInputs();
         loadBoardData();
     }
@@ -321,6 +381,9 @@ var PlanningBoard = (function () {
                         }
                     });
                     state.holidayDates = hSet;
+
+                    // Re-compute cell width now that DOM is available
+                    _recalcCellWidth();
 
                     PB_Render.renderBoard();
                     PB_Render.checkOverbooking();
