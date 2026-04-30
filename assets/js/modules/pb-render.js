@@ -81,8 +81,12 @@ var PB_Render = (function () {
         dates.forEach(function (date) {
             var d         = new Date(date + 'T00:00:00');
             var isWeekend = d.getDay() === 0 || d.getDay() === 6;
+            var isHoliday = !isWeekend && !!(_st.holidayDates && _st.holidayDates[date]);
             var isToday   = date === today;
-            var cls       = 'rb-date-cell' + (isWeekend ? ' weekend' : '') + (isToday ? ' today' : '');
+            var cls       = 'rb-date-cell'
+                          + (isWeekend ? ' weekend' : '')
+                          + (isHoliday ? ' holiday' : '')
+                          + (isToday   ? ' today'   : '');
             html += '<div class="' + cls + '" data-date="' + date
                   + '" style="width:' + _st.cellWidth + 'px">'
                   + '<span class="rb-day-name">' + dayNames[d.getDay()] + '</span>'
@@ -141,8 +145,12 @@ var PB_Render = (function () {
         var taskAllocs = allocs.filter(function (a) { return a.type === 'task'; })
                                .sort(function (a, b) { return a.start_date > b.start_date ? 1 : -1; });
 
+        // Only show time-off lane for personal absences (vacation, sick, etc.).
+        // Holidays are rendered as column highlights via .holiday CSS class — no bar needed.
         var timeOffList = _st.timeOff.filter(function (t) {
-            return String(t.staff_id) === String(staffId);
+            return String(t.staff_id) === String(staffId)
+                && t.type !== 'holiday'
+                && t.source !== 'hr_holiday';
         });
 
         // Capacity summary
@@ -287,11 +295,13 @@ var PB_Render = (function () {
         dates.forEach(function (date) {
             var d         = new Date(date + 'T00:00:00');
             var isWeekend = d.getDay() === 0 || d.getDay() === 6;
+            var isHoliday = !isWeekend && !!(_st.holidayDates && _st.holidayDates[date]);
             var isToday   = date === today;
             var cls       = 'rb-lane-cell'
                 + (isWeekend ? ' weekend' : '')
+                + (isHoliday ? ' holiday' : '')
                 + (isToday   ? ' today'   : '');
-            if (!isHeader && !isWeekend && staffId) {
+            if (!isHeader && !isWeekend && !isHoliday && staffId) {
                 var cs = _getCapacityStatus(staffId, date);
                 if (cs === 'overbooked') cls += ' rb-cell-over';
                 else if (cs === 'full')  cls += ' rb-cell-full';

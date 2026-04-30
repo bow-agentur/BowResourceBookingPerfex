@@ -36,6 +36,7 @@ var PlanningBoard = (function () {
         staff:          [],
         allocations:    [],
         timeOff:        [],
+        holidayDates:   {},        // date string → true, for global column highlight
         projects:       [],
         capacity:       {},        // keyed by staffid → date → { available, allocated, status }
         cellWidth:      40,        // px per day column
@@ -302,7 +303,25 @@ var PlanningBoard = (function () {
                     state.projects    = response.data.projects    || [];
                     state.capacity    = response.data.capacity    || {};
 
-                    PB_Render.renderBoard();
+                    // Build global holiday date lookup from time_off entries
+                    // that have type === 'holiday' (from HR module public holidays).
+                    // These will be rendered as orange column highlights, not as bars.
+                    var hSet = {};
+                    state.timeOff.forEach(function (t) {
+                        if (t.type === 'holiday' || t.source === 'hr_holiday') {
+                            var d = t.start_date || t.date_from;
+                            var e = t.end_date   || t.date_to;
+                            if (d && e) {
+                                PB_Utils.getDateRange(d, e, true).forEach(function (dt) {
+                                    hSet[dt] = true;
+                                });
+                            } else if (d) {
+                                hSet[d] = true;
+                            }
+                        }
+                    });
+                    state.holidayDates = hSet;
+
                     PB_Render.checkOverbooking();
                     if (config.canEdit) PB_Drag.initDragDrop();
                 } else {

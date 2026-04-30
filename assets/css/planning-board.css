@@ -930,6 +930,10 @@
 .rb-lane-cell.weekend {
     background-color: rgba(0,0,0,0.04);
 }
+/* Public holidays: orange column (from HR module) */
+.rb-lane-cell.holiday {
+    background-color: rgba(243,156,18,0.13);
+}
 /* Today: light blue column */
 .rb-lane-cell.today {
     background-color: rgba(52,152,219,0.10);
@@ -938,9 +942,26 @@
 .rb-header-cells .rb-lane-cell.weekend {
     background-color: rgba(0,0,0,0.04);
 }
+.rb-header-cells .rb-lane-cell.holiday {
+    background-color: rgba(243,156,18,0.13);
+}
 .rb-header-cells .rb-lane-cell.today {
     background-color: rgba(52,152,219,0.10);
     box-shadow: inset 0 -2px 0 #3498db;
+}
+
+/* Date header cells — same column shading */
+.rb-date-cell.weekend {
+    background-color: rgba(0,0,0,0.04);
+}
+.rb-date-cell.holiday {
+    background-color: rgba(243,156,18,0.18);
+    color: #b7620a;
+}
+.rb-date-cell.holiday .rb-day-name,
+.rb-date-cell.holiday .rb-day-num {
+    color: #b7620a;
+    font-weight: 600;
 }
 
 /* --------------------------------------------------------------------------
