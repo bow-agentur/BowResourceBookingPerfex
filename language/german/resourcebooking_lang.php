@@ -151,7 +151,7 @@ $lang['half_day'] = 'Halber Tag';
 $lang['full_day'] = 'Ganzer Tag';
 
 // Board UI
-$lang['today'] = 'Heute';
+$lang['today'] = 'Scroll';
 $lang['this_week'] = 'Diese Woche';
 $lang['this_month'] = 'Dieser Monat';
 $lang['zoom_in'] = 'Vergrößern';

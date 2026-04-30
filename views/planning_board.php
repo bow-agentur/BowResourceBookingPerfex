@@ -271,23 +271,29 @@
                     </div>
                 </form>
             </div>
-            <div class="modal-footer">
-                <?php if(has_permission('resourcebooking', '', 'delete')): ?>
-                <button type="button" class="btn btn-danger pull-left" id="rb-delete-allocation" style="display: none;">
-                    <i class="fa fa-trash"></i> <?php echo _l('delete'); ?>
-                </button>
-                <?php endif; ?>
-                <!-- Shown only when editing an existing task allocation -->
-                <button type="button" class="btn btn-warning pull-left" id="rb-reassign-allocation" style="display:none;">
-                    <i class="fa fa-exchange"></i> <?php echo _l('reassign_task'); ?>
-                </button>
-                <button type="button" class="btn btn-default pull-left" id="rb-remove-person-allocation" style="display:none;">
-                    <i class="fa fa-user-times"></i> <?php echo _l('remove_from_task'); ?>
-                </button>
-                <button type="button" class="btn btn-default" data-dismiss="modal"><?php echo _l('cancel'); ?></button>
-                <button type="button" class="btn btn-primary" id="rb-save-allocation">
-                    <?php echo _l('save_allocation'); ?>
-                </button>
+            <div class="modal-footer" style="display:flex;align-items:center;justify-content:space-between;">
+                <!-- Left action buttons (destructive / task management) -->
+                <div class="rb-modal-footer-left" style="display:flex;gap:6px;">
+                    <?php if(has_permission('resourcebooking', '', 'delete')): ?>
+                    <button type="button" class="btn btn-danger" id="rb-delete-allocation" style="display:none;">
+                        <i class="fa fa-trash"></i> <?php echo _l('delete'); ?>
+                    </button>
+                    <?php endif; ?>
+                    <!-- Shown only when editing an existing task allocation -->
+                    <button type="button" class="btn btn-warning" id="rb-reassign-allocation" style="display:none;">
+                        <i class="fa fa-exchange"></i> <?php echo _l('reassign_task'); ?>
+                    </button>
+                    <button type="button" class="btn btn-default" id="rb-remove-person-allocation" style="display:none;">
+                        <i class="fa fa-user-times"></i> <?php echo _l('remove_from_task'); ?>
+                    </button>
+                </div>
+                <!-- Right: standard actions -->
+                <div class="rb-modal-footer-right" style="display:flex;gap:6px;">
+                    <button type="button" class="btn btn-default" data-dismiss="modal"><?php echo _l('cancel'); ?></button>
+                    <button type="button" class="btn btn-primary" id="rb-save-allocation">
+                        <?php echo _l('save_allocation'); ?>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

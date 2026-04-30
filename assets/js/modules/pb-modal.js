@@ -33,6 +33,10 @@ var PB_Modal = (function () {
         if ($form) $form.reset();
 
         $('#rb-overbooking-warning').hide();
+        // Always reset action buttons before populating — prevents stale state
+        $('#rb-delete-allocation').hide();
+        $('#rb-reassign-allocation').hide();
+        $('#rb-remove-person-allocation').hide();
         _taskCache = {};
         $('#rb-alloc-task')
             .empty()
@@ -66,8 +70,10 @@ var PB_Modal = (function () {
             if (_cfg.canDelete) {
                 $('#rb-delete-allocation').show();
             }
-            // Show reassign + remove-person buttons for task allocations
-            if (alloc.type === 'task' && alloc.task_id && _cfg.canEdit) {
+            // Show reassign + remove-person buttons for task allocations.
+            // Only needs delete + create permission (server enforces both).
+            if (alloc.type === 'task' && alloc.task_id
+                    && (_cfg.canDelete || _cfg.canCreate || _cfg.canEdit)) {
                 $('#rb-reassign-allocation').show();
                 $('#rb-remove-person-allocation').show();
             }
@@ -75,9 +81,6 @@ var PB_Modal = (function () {
             // ── Create new ──────────────────────────────────────────────────
             $('#rb-modal-title').text('Neue Zuweisung');
             $('#rb-alloc-id').val('');
-            $('#rb-delete-allocation').hide();
-            $('#rb-reassign-allocation').hide();
-            $('#rb-remove-person-allocation').hide();
 
             if (staffId) $('#rb-alloc-staff').selectpicker('val', String(staffId));
             if (date)    { $('#rb-alloc-start').val(date); $('#rb-alloc-end').val(date); }
