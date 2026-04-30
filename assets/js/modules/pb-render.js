@@ -406,14 +406,18 @@ var PB_Render = (function () {
             + 'top:'              + barTop + 'px;'
             + 'background-color:' + color  + ';color:' + textColor + '">';
 
-        if (isOver) h += '<i class="fa fa-exclamation-triangle rb-overbooking-icon"></i> ';
+        if (isOver) h += '<i class="fa fa-exclamation-triangle rb-overbooking-icon"></i>';
 
-        if (width > 20) {
-            h += '<span class="rb-bar-label">'
-               + PB_Utils.escHtml(width > 60 ? barLabel : '') + '</span>';
+        // Always try to show task name (hidden by CSS overflow when bar too narrow)
+        h += '<span class="rb-bar-label">' + PB_Utils.escHtml(barLabel) + '</span>';
+
+        // Project name on second line (only when bar is tall enough: ≥ 28 px)
+        if (alloc.project_name && barH >= 28) {
+            h += '<span class="rb-bar-project">' + PB_Utils.escHtml(alloc.project_name) + '</span>';
         }
 
-        if (hoursLabel && width > 70) {
+        // Hours on third line (or second when no project fits)
+        if (hoursLabel && barH >= 18 && width > 50) {
             if (alloc.estimated_hours && _cfg.canEdit) {
                 h += '<span class="rb-bar-hours rb-inline-editable" '
                    + 'data-task-id="' + alloc.task_id + '" '

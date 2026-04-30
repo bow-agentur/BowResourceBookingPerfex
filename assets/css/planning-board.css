@@ -918,11 +918,37 @@
 }
 
 /* --------------------------------------------------------------------------
+   Lane cell base + weekend/today/holiday column backgrounds
+   These rules make the column shading span EVERY lane in the staff row.
+   -------------------------------------------------------------------------- */
+.rb-lane-cell {
+    flex-shrink: 0;
+    border-right: 1px solid rgba(0,0,0,0.04);
+    box-sizing: border-box;
+}
+/* Weekends: subtle grey column */
+.rb-lane-cell.weekend {
+    background-color: rgba(0,0,0,0.04);
+}
+/* Today: light blue column */
+.rb-lane-cell.today {
+    background-color: rgba(52,152,219,0.10);
+}
+/* Also mark the date header cells in the staff rows */
+.rb-header-cells .rb-lane-cell.weekend {
+    background-color: rgba(0,0,0,0.04);
+}
+.rb-header-cells .rb-lane-cell.today {
+    background-color: rgba(52,152,219,0.10);
+    box-shadow: inset 0 -2px 0 #3498db;
+}
+
+/* --------------------------------------------------------------------------
    Lane cell capacity backgrounds
    -------------------------------------------------------------------------- */
-.rb-lane-cell.rb-cell-over { background-color: rgba(231,76,60,0.10) !important; }
-.rb-lane-cell.rb-cell-full { background-color: rgba(230,126,34,0.07) !important; }
-.rb-lane-cell.rb-cell-warn { background-color: rgba(241,196,15,0.07) !important; }
+.rb-lane-cell.rb-cell-over { background-color: rgba(231,76,60,0.12) !important; }
+.rb-lane-cell.rb-cell-full { background-color: rgba(230,126,34,0.08) !important; }
+.rb-lane-cell.rb-cell-warn { background-color: rgba(241,196,15,0.08) !important; }
 
 /* --------------------------------------------------------------------------
    Allocation bars v2.0
@@ -981,6 +1007,37 @@
     border-radius: 3px;
     opacity: 0.92;
     z-index: 2;
+    /* switch to column flex so name / project / hours stack vertically */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2px 6px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.rb-task-bar .rb-bar-label {
+    font-weight: 600;
+    font-size: 10px;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.rb-task-bar .rb-bar-project {
+    font-size: 9px;
+    opacity: 0.75;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.rb-task-bar .rb-bar-hours {
+    font-size: 9px;
+    font-weight: 500;
+    opacity: 0.90;
+    margin-left: 0;
+    line-height: 1.2;
 }
 
 .rb-allocation:hover {

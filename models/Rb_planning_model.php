@@ -840,10 +840,11 @@ class Rb_planning_model extends App_Model
 
         // 3. Task assignments + planning overrides
         $has_estimated_hours = $this->db->field_exists('estimated_hours', db_prefix() . 'tasks');
-        $task_select = 'ta.staffid AS staff_id, t.id AS task_id, t.name AS task_name, t.rel_id AS project_id, t.startdate AS task_start, t.duedate AS task_due, t.status AS task_status, ' . ($has_estimated_hours ? 't.estimated_hours, ' : 'NULL AS estimated_hours, ') . 'a.id AS allocation_id, a.hours_per_day, a.color AS override_color, a.note, a.date_from AS override_from, a.date_to AS override_to, a.include_weekends';
+        $task_select = 'ta.staffid AS staff_id, t.id AS task_id, t.name AS task_name, t.rel_id AS project_id, p.name AS project_name, t.startdate AS task_start, t.duedate AS task_due, t.status AS task_status, ' . ($has_estimated_hours ? 't.estimated_hours, ' : 'NULL AS estimated_hours, ') . 'a.id AS allocation_id, a.hours_per_day, a.color AS override_color, a.note, a.date_from AS override_from, a.date_to AS override_to, a.include_weekends';
         $this->db->select($task_select);
         $this->db->from(db_prefix() . 'task_assigned ta');
         $this->db->join(db_prefix() . 'tasks t', 't.id = ta.taskid');
+        $this->db->join(db_prefix() . 'projects p', 'p.id = t.rel_id', 'left');
         $this->db->join(
             $this->table_allocations . ' a',
             'a.staff_id = ta.staffid AND a.task_id = ta.taskid',
@@ -912,6 +913,7 @@ class Rb_planning_model extends App_Model
                 'task_id'         => (int)$row['task_id'],
                 'task_name'       => $row['task_name'],
                 'task_status'     => (int)$row['task_status'],
+                'project_name'    => $row['project_name'] ?? null,
                 'estimated_hours' => $est_hours,
                 'daily_avg'       => $daily_avg,
                 'date_from'       => $df,
@@ -919,7 +921,7 @@ class Rb_planning_model extends App_Model
                 'start_date'      => $df,
                 'end_date'        => $dt,
                 'hours_per_day'   => $hpd,
-                'project_color'   => !empty($row['override_color']) ? $row['override_color'] : null,
+                'project_color'   => !empty($row['override_color']) ? $row['override_color'] : rb_project_color((int)$row['project_id']),
                 'note'            => $row['note'],
                 'include_weekends'=> !empty($row['include_weekends']) ? 1 : 0,
                 'type'            => 'task',
