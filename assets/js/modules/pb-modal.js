@@ -39,8 +39,8 @@ var PB_Modal = (function () {
         if ($form) $form.reset();
 
         $('#rb-overbooking-warning').hide();
-        // Always reset action buttons before populating — prevents stale state
-        $('#rb-delete-allocation').hide();
+        // Hide the whole action-button group and the task-only buttons while resetting
+        $('#rb-modal-action-buttons').hide();
         $('#rb-reassign-allocation').hide();
         $('#rb-remove-person-allocation').hide();
         // Hide the reassign-to panel if it was left open
@@ -82,10 +82,10 @@ var PB_Modal = (function () {
             if (alloc.project_id) {
                 loadTasksDropdown(alloc.project_id, alloc.task_id);
             }
-            // Show delete for ANY existing allocation (server enforces auth).
+            // Show the action button group for any existing allocation
             console.log('[PB_Modal] showing delete button, task_id=', alloc.task_id);
-            $('#rb-delete-allocation').show();
-            // Show reassign + remove-person for any task allocation.
+            $('#rb-modal-action-buttons').css('display', 'flex');
+            // Show reassign + remove-person only for task allocations
             if (alloc.task_id) {
                 $('#rb-reassign-allocation').show();
                 $('#rb-remove-person-allocation').show();

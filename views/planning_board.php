@@ -292,9 +292,9 @@
                 </form>
             </div>
             <div class="modal-footer" style="display:flex;align-items:center;justify-content:space-between;">
-                <!-- Left action buttons (destructive / task management) -->
-                <div class="rb-modal-footer-left" style="display:flex;gap:6px;">
-                    <button type="button" class="btn btn-danger" id="rb-delete-allocation" style="display:none;">
+                <!-- Left action buttons: hidden in create-new mode, shown in edit mode -->
+                <div id="rb-modal-action-buttons" style="display:none;gap:6px;">
+                    <button type="button" class="btn btn-danger" id="rb-delete-allocation">
                         <i class="fa fa-trash"></i> <?php echo _l('delete'); ?>
                     </button>
                     <!-- Shown only when editing an existing task allocation -->
