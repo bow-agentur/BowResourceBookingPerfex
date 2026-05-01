@@ -146,22 +146,19 @@ var PlanningBoard = (function () {
             if (tid) PB_Modal.fetchTaskDates(tid);
         });
 
-        // Single click on allocation bar → edit modal (any user with edit/delete/create permission)
-        console.log('[PB] _bindEvents permissions: canEdit=', config.canEdit, 'canDelete=', config.canDelete, 'canCreate=', config.canCreate, 'isEmployee=', config.isEmployee);
-        if (config.canEdit || config.canDelete || config.canCreate) {
-            console.log('[PB] bar click handler BOUND');
+        // Bar clicks are handled by interact.js 'tap' event in pb-drag.js,
+        // because interact.js suppresses native 'click' on drag-enabled elements.
+        // (The tap handler is registered in initDragDrop, which runs after board load.)
+        // For users without canEdit (drag disabled), fall back to a delegated click.
+        if (!config.canEdit && (config.canDelete || config.canCreate)) {
             $('#rb-board-body').on('click', '.rb-allocation[data-id]', function (e) {
                 e.stopPropagation();
                 var rawId = $(this).data('id');
-                console.log('[PB] bar clicked, rawId=', rawId, 'element=', this.className, 'data-id attr=', $(this).attr('data-id'));
+                console.log('[PB] fallback click bar rawId=', rawId);
                 if (rawId !== undefined && rawId !== null && rawId !== '') {
                     PB_Modal.openAllocationModal(rawId);
-                } else {
-                    console.warn('[PB] rawId is empty/undefined — modal not opened');
                 }
             });
-        } else {
-            console.warn('[PB] bar click handler NOT BOUND — all permissions false');
         }
 
         // Double-click on empty lane cell → create modal (admin only)
@@ -396,7 +393,8 @@ var PlanningBoard = (function () {
 
                     PB_Render.renderBoard();
                     PB_Render.checkOverbooking();
-                    if (config.canEdit) PB_Drag.initDragDrop();
+                    // Always init interact so tap→modal works; drag/resize only activates when canEdit
+                    PB_Drag.initDragDrop();
                 } else {
                     alert_float(
                         'danger',

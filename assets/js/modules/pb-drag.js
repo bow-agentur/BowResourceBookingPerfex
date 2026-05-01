@@ -23,12 +23,27 @@ var PB_Drag = (function () {
     // =========================================================================
 
     function initDragDrop() {
-        if (!_cfg.canEdit || typeof interact === 'undefined') return;
+        if (typeof interact === 'undefined') return;
 
         // Clear any previous interact bindings to avoid duplicates
         try { interact('.rb-project-bar, .rb-task-bar').unset(); } catch (e) {}
 
-        interact('.rb-project-bar, .rb-task-bar')
+        // Always register tap so clicking a bar opens the modal.
+        // interact.js suppresses the native DOM 'click' on elements it manages,
+        // so the tap event is the only reliable way to detect a non-drag click.
+        var interactable = interact('.rb-project-bar, .rb-task-bar')
+            .on('tap', function (e) {
+                var rawId = $(e.currentTarget).data('id');
+                if (rawId !== undefined && rawId !== null && rawId !== '') {
+                    if (typeof PB_Modal !== 'undefined') {
+                        PB_Modal.openAllocationModal(rawId);
+                    }
+                }
+            });
+
+        if (!_cfg.canEdit) return; // drag/resize only for users with edit permission
+
+        interactable
             .draggable({
                 inertia:    false,
                 autoScroll: true,
