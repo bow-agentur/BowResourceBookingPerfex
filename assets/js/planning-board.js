@@ -146,20 +146,31 @@ var PlanningBoard = (function () {
             if (tid) PB_Modal.fetchTaskDates(tid);
         });
 
-        // Bar clicks are handled by interact.js 'tap' event in pb-drag.js,
-        // because interact.js suppresses native 'click' on drag-enabled elements.
-        // (The tap handler is registered in initDragDrop, which runs after board load.)
-        // For users without canEdit (drag disabled), fall back to a delegated click.
-        if (!config.canEdit && (config.canDelete || config.canCreate)) {
-            $('#rb-board-body').on('click', '.rb-allocation[data-id]', function (e) {
-                e.stopPropagation();
-                var rawId = $(this).data('id');
-                console.log('[PB] fallback click bar rawId=', rawId);
-                if (rawId !== undefined && rawId !== null && rawId !== '') {
-                    PB_Modal.openAllocationModal(rawId);
-                }
-            });
-        }
+        // Bar click → edit modal.
+        // Neither interact.js 'tap' nor delegated jQuery 'click' fires reliably
+        // because interact.js calls preventDefault() on pointerdown, suppressing
+        // the synthetic click in some browsers. Use mousedown (capture the bar ID)
+        // + mouseup on document (open modal if pointer barely moved = tap, not drag).
+        var _barMouseStart = null;
+        $('#rb-board-body').on('mousedown', '.rb-allocation', function (e) {
+            if ($(e.target).hasClass('rb-resize-handle')) return;
+            if (e.which !== 1) return; // left button only
+            var rawId = $(this).attr('data-id');
+            console.log('[PB] mousedown on bar, rawId=', rawId);
+            _barMouseStart = { id: rawId, x: e.clientX, y: e.clientY };
+        });
+        $(document).on('mouseup.rbbar', function (e) {
+            if (!_barMouseStart) return;
+            var start = _barMouseStart;
+            _barMouseStart = null;
+            var dx = Math.abs(e.clientX - start.x);
+            var dy = Math.abs(e.clientY - start.y);
+            console.log('[PB] mouseup, dx=', dx, 'dy=', dy, 'id=', start.id);
+            if (dx < 8 && dy < 8 && start.id !== undefined && start.id !== null && start.id !== '') {
+                PB_Modal.openAllocationModal(start.id);
+            }
+        });
+        $(document).on('mouseleave.rbbar', function () { _barMouseStart = null; });
 
         // Double-click on empty lane cell → create modal (admin only)
         if (config.canCreate) {
