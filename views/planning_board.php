@@ -291,9 +291,9 @@
                     </div>
                 </form>
             </div>
-            <div class="modal-footer" style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="modal-footer" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;">
                 <!-- Left action buttons: hidden in create-new mode, shown in edit mode -->
-                <div id="rb-modal-action-buttons" style="display:none;gap:6px;">
+                <div id="rb-modal-action-buttons" style="display:none;flex-wrap:wrap;gap:6px;">
                     <button type="button" class="btn btn-danger" id="rb-delete-allocation">
                         <i class="fa fa-trash"></i> <?php echo _l('delete'); ?>
                     </button>
@@ -306,7 +306,7 @@
                     </button>
                 </div>
                 <!-- Right: standard actions -->
-                <div class="rb-modal-footer-right" style="display:flex;gap:6px;">
+                <div style="display:flex;gap:6px;">
                     <button type="button" class="btn btn-default" data-dismiss="modal"><?php echo _l('cancel'); ?></button>
                     <button type="button" class="btn btn-primary" id="rb-save-allocation">
                         <?php echo _l('save_allocation'); ?>

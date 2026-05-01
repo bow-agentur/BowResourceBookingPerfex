@@ -154,9 +154,8 @@ var PlanningBoard = (function () {
         var _barMouseStart = null;
         $('#rb-board-body').on('mousedown', '.rb-allocation', function (e) {
             if ($(e.target).hasClass('rb-resize-handle')) return;
-            if (e.which !== 1) return; // left button only
+            if (e.which !== 1) return;
             var rawId = $(this).attr('data-id');
-            console.log('[PB] mousedown on bar, rawId=', rawId);
             _barMouseStart = { id: rawId, x: e.clientX, y: e.clientY };
         });
         $(document).on('mouseup.rbbar', function (e) {
@@ -165,7 +164,6 @@ var PlanningBoard = (function () {
             _barMouseStart = null;
             var dx = Math.abs(e.clientX - start.x);
             var dy = Math.abs(e.clientY - start.y);
-            console.log('[PB] mouseup, dx=', dx, 'dy=', dy, 'id=', start.id);
             if (dx < 8 && dy < 8 && start.id !== undefined && start.id !== null && start.id !== '') {
                 PB_Modal.openAllocationModal(start.id);
             }

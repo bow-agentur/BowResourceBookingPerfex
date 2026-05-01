@@ -27,12 +27,7 @@ var PB_Modal = (function () {
 
     function openAllocationModal(id, staffId, date) {
         // Read-only when user has no edit/create/delete permission
-        if (!_cfg.canEdit && !_cfg.canCreate && !_cfg.canDelete) {
-            console.warn('[PB_Modal] openAllocationModal blocked — no permissions', _cfg);
-            return;
-        }
-
-        console.log('[PB_Modal] openAllocationModal id=', id, 'staffId=', staffId, 'allocations#=', _st.allocations ? _st.allocations.length : 'N/A');
+        if (!_cfg.canEdit && !_cfg.canCreate && !_cfg.canDelete) return;
 
         var $modal = $('#rb-allocation-modal');
         var $form  = $('#rb-allocation-form')[0];
@@ -55,7 +50,6 @@ var PB_Modal = (function () {
         if (id) {
             // ── Edit existing ───────────────────────────────────────────────
             var alloc = _st.allocations.find(function (a) { return a.id == id; });
-            console.log('[PB_Modal] alloc lookup for id=', id, '→', alloc ? 'FOUND (task_id=' + alloc.task_id + ')' : 'NOT FOUND');
             if (!alloc) {
                 // Still show the modal so the user sees something rather than silence
                 $('#rb-modal-title').text('Zuweisung bearbeiten');
@@ -83,7 +77,6 @@ var PB_Modal = (function () {
                 loadTasksDropdown(alloc.project_id, alloc.task_id);
             }
             // Show the action button group for any existing allocation
-            console.log('[PB_Modal] showing delete button, task_id=', alloc.task_id);
             $('#rb-modal-action-buttons').css('display', 'flex');
             // Show reassign + remove-person only for task allocations
             if (alloc.task_id) {
