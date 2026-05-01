@@ -27,7 +27,12 @@ var PB_Modal = (function () {
 
     function openAllocationModal(id, staffId, date) {
         // Read-only when user has no edit/create/delete permission
-        if (!_cfg.canEdit && !_cfg.canCreate && !_cfg.canDelete) return;
+        if (!_cfg.canEdit && !_cfg.canCreate && !_cfg.canDelete) {
+            console.warn('[PB_Modal] openAllocationModal blocked — no permissions', _cfg);
+            return;
+        }
+
+        console.log('[PB_Modal] openAllocationModal id=', id, 'staffId=', staffId, 'allocations#=', _st.allocations ? _st.allocations.length : 'N/A');
 
         var $modal = $('#rb-allocation-modal');
         var $form  = $('#rb-allocation-form')[0];
@@ -40,17 +45,23 @@ var PB_Modal = (function () {
         $('#rb-remove-person-allocation').hide();
         // Hide the reassign-to panel if it was left open
         $('#rb-reassign-section').hide();
-        $('#rb-reassign-staff').selectpicker('val', '');
+        try { $('#rb-reassign-staff').selectpicker('val', ''); } catch(e) { $('#rb-reassign-staff').val(''); }
         _taskCache = {};
         $('#rb-alloc-task')
             .empty()
-            .append('<option value="">— kein Task —</option>')
-            .selectpicker('refresh');
+            .append('<option value="">— kein Task —</option>');
+        try { $('#rb-alloc-task').selectpicker('refresh'); } catch(e) {}
 
         if (id) {
             // ── Edit existing ───────────────────────────────────────────────
             var alloc = _st.allocations.find(function (a) { return a.id == id; });
-            if (!alloc) return;
+            console.log('[PB_Modal] alloc lookup for id=', id, '→', alloc ? 'FOUND (task_id=' + alloc.task_id + ')' : 'NOT FOUND');
+            if (!alloc) {
+                // Still show the modal so the user sees something rather than silence
+                $('#rb-modal-title').text('Zuweisung bearbeiten');
+                $modal.modal('show');
+                return;
+            }
 
             $('#rb-modal-title').text('Zuweisung bearbeiten');
             $('#rb-alloc-id').val(alloc.id);
@@ -72,6 +83,7 @@ var PB_Modal = (function () {
                 loadTasksDropdown(alloc.project_id, alloc.task_id);
             }
             // Show delete for ANY existing allocation (server enforces auth).
+            console.log('[PB_Modal] showing delete button, task_id=', alloc.task_id);
             $('#rb-delete-allocation').show();
             // Show reassign + remove-person for any task allocation.
             if (alloc.task_id) {
