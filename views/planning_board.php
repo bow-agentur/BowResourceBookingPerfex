@@ -263,6 +263,26 @@
                         <textarea class="form-control" name="note" id="rb-alloc-note" rows="3"></textarea>
                     </div>
                     
+                    <!-- Reassign-to panel: shown when "Reassign" button is clicked -->
+                    <div id="rb-reassign-section" style="display:none;border:1px solid #f0ad4e;border-radius:4px;padding:12px;margin-bottom:10px;background:#fffbf0">
+                        <p class="no-margin mbot5"><i class="fa fa-exchange text-warning"></i> <strong><?php echo _l('reassign_task'); ?></strong> &mdash; <?php echo _l('select_new_assignee'); ?>:</p>
+                        <select id="rb-reassign-staff" class="selectpicker" data-live-search="true" data-width="100%"
+                                title="<?php echo _l('select_new_assignee'); ?>">
+                            <option value="">— <?php echo _l('select_new_assignee'); ?> —</option>
+                            <?php foreach($staff as $member): ?>
+                            <option value="<?php echo $member['staffid']; ?>">
+                                <?php echo $member['firstname'] . ' ' . $member['lastname']; ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button type="button" class="btn btn-warning btn-block mtop10" id="rb-confirm-reassign">
+                            <i class="fa fa-check"></i> <?php echo _l('confirm_reassign'); ?>
+                        </button>
+                        <button type="button" class="btn btn-link btn-block" id="rb-cancel-reassign" style="margin-top:4px;padding:2px">
+                            <?php echo _l('cancel'); ?>
+                        </button>
+                    </div>
+
                     <!-- Overbooking Warning -->
                     <div class="alert alert-warning" id="rb-overbooking-warning" style="display: none;">
                         <i class="fa fa-exclamation-triangle"></i>
@@ -274,11 +294,9 @@
             <div class="modal-footer" style="display:flex;align-items:center;justify-content:space-between;">
                 <!-- Left action buttons (destructive / task management) -->
                 <div class="rb-modal-footer-left" style="display:flex;gap:6px;">
-                    <?php if(has_permission('resourcebooking', '', 'delete')): ?>
                     <button type="button" class="btn btn-danger" id="rb-delete-allocation" style="display:none;">
                         <i class="fa fa-trash"></i> <?php echo _l('delete'); ?>
                     </button>
-                    <?php endif; ?>
                     <!-- Shown only when editing an existing task allocation -->
                     <button type="button" class="btn btn-warning" id="rb-reassign-allocation" style="display:none;">
                         <i class="fa fa-exchange"></i> <?php echo _l('reassign_task'); ?>

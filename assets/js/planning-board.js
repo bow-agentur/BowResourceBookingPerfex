@@ -117,6 +117,8 @@ var PlanningBoard = (function () {
         $('#rb-save-timeoff').on('click',              PB_Modal.saveTimeOff);
         $('#rb-delete-allocation').on('click',         PB_Modal.deleteAllocation);
         $('#rb-reassign-allocation').on('click',       PB_Modal.reassignAllocation);
+        $('#rb-confirm-reassign').on('click',          PB_Modal.confirmReassign);
+        $('#rb-cancel-reassign').on('click', function () { $('#rb-reassign-section').hide(); });
         $('#rb-remove-person-allocation').on('click',  PB_Modal.removePersonFromTask);
 
         // Live total hours recalculation in modal

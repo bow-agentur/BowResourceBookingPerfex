@@ -37,6 +37,9 @@ var PB_Modal = (function () {
         $('#rb-delete-allocation').hide();
         $('#rb-reassign-allocation').hide();
         $('#rb-remove-person-allocation').hide();
+        // Hide the reassign-to panel if it was left open
+        $('#rb-reassign-section').hide();
+        $('#rb-reassign-staff').selectpicker('val', '');
         _taskCache = {};
         $('#rb-alloc-task')
             .empty()
@@ -67,11 +70,9 @@ var PB_Modal = (function () {
             if (alloc.project_id) {
                 loadTasksDropdown(alloc.project_id, alloc.task_id);
             }
-            if (_cfg.canDelete) {
-                $('#rb-delete-allocation').show();
-            }
-            // Show reassign + remove-person for any allocation that has a task_id.
-            // Server-side enforces auth; no need to repeat the permission check here.
+            // Show delete for ANY existing allocation (server enforces auth).
+            $('#rb-delete-allocation').show();
+            // Show reassign + remove-person for any task allocation.
             if (alloc.task_id) {
                 $('#rb-reassign-allocation').show();
                 $('#rb-remove-person-allocation').show();
@@ -307,44 +308,70 @@ var PB_Modal = (function () {
             alert_float('warning', 'Bitte zuerst eine Task-Zuweisung auswählen');
             return;
         }
-        var newStaffId = $('#rb-alloc-staff').val();
+
+        var $section = $('#rb-reassign-section');
+        if ($section.is(':visible')) {
+            // Second click = hide panel
+            $section.hide();
+            return;
+        }
+
+        // Disable the current person in the target dropdown
+        $('#rb-reassign-staff option').each(function () {
+            $(this).prop('disabled', $(this).val() !== '' && String($(this).val()) === String(alloc.staff_id));
+        });
+        $('#rb-reassign-staff').selectpicker('val', '').selectpicker('refresh');
+        $section.show();
+    }
+
+    // =========================================================================
+    // CONFIRM REASSIGN — runs after the user picks a new person in the panel
+    // =========================================================================
+
+    function confirmReassign() {
+        var id    = $('#rb-alloc-id').val();
+        var alloc = _st.allocations.find(function (a) { return String(a.id) === String(id); });
+        if (!alloc || !alloc.task_id) return;
+
+        var newStaffId = $('#rb-reassign-staff').val();
         if (!newStaffId) { alert_float('warning', 'Neuen Mitarbeiter wählen'); return; }
         if (String(newStaffId) === String(alloc.staff_id)) {
             alert_float('warning', 'Gleicher Mitarbeiter – bitte anderen wählen');
             return;
         }
-        var staffName = $('#rb-alloc-staff option:selected').text().trim();
-        var confirmMsg = 'Task neu zuweisen an "' + staffName + '" (vorherige Person wird entfernt)?';
+
+        var staffName   = $('#rb-reassign-staff option:selected').text().trim();
+        var confirmMsg  = 'Task neu zuweisen an "' + staffName + '"?\nDie vorherige Person wird vom Task entfernt.';
         if (!confirm(confirmMsg)) return;
 
         var isNumericId = /^\d+$/.test(String(id));
-        var errLang = (_cfg.lang && _cfg.lang.errorSaving) || 'Fehler beim Speichern';
+        var errLang     = (_cfg.lang && _cfg.lang.errorSaving) || 'Fehler beim Speichern';
 
         // Step 1: remove old person from task
         $.ajax({
-            url:      _cfg.apiUrl + '/api_remove_member',
-            type:     'POST',
-            data:     { staff_id: alloc.staff_id, task_id: alloc.task_id, project_id: alloc.project_id || '' },
+            url:  _cfg.apiUrl + '/api_remove_member',
+            type: 'POST',
+            data: { staff_id: alloc.staff_id, task_id: alloc.task_id, project_id: alloc.project_id || '' },
             dataType: 'json',
             success: function () {
-                // Step 2: add new person to task
+                // Step 2: add new person to task (+ auto-adds as project follower)
                 $.ajax({
-                    url:      _cfg.apiUrl + '/api_assign_member',
-                    type:     'POST',
-                    data:     { staff_id: newStaffId, task_id: alloc.task_id, project_id: alloc.project_id || '' },
+                    url:  _cfg.apiUrl + '/api_assign_member',
+                    type: 'POST',
+                    data: { staff_id: newStaffId, task_id: alloc.task_id, project_id: alloc.project_id || '' },
                     dataType: 'json',
                     success: function (r) {
                         if (!r || !r.success) {
                             alert_float('danger', (r && r.error) || errLang);
                             return;
                         }
-                        // Step 3: upsert override for new person
+                        // Step 3: upsert override for new person with current form values
                         $.ajax({
                             url:  _cfg.apiUrl + '/api_upsert_override',
                             type: 'POST',
                             data: {
                                 staff_id:         newStaffId,
-                                project_id:       $('#rb-alloc-project').val() || null,
+                                project_id:       alloc.project_id || null,
                                 task_id:          alloc.task_id,
                                 date_from:        $('#rb-alloc-start').val(),
                                 date_to:          $('#rb-alloc-end').val(),
@@ -364,7 +391,7 @@ var PB_Modal = (function () {
                                     });
                                 }
                                 $('#rb-allocation-modal').modal('hide');
-                                alert_float('success', 'Umgebucht');
+                                alert_float('success', 'Umgebucht an ' + staffName);
                                 _reload();
                             },
                             error: function () {
@@ -580,6 +607,7 @@ var PB_Modal = (function () {
         saveAllocation:          saveAllocation,
         deleteAllocation:        deleteAllocation,
         reassignAllocation:      reassignAllocation,
+        confirmReassign:         confirmReassign,
         removePersonFromTask:    removePersonFromTask,
         saveTimeOff:             saveTimeOff,
         initInlineEdit:          initInlineEdit,
