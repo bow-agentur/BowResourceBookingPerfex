@@ -70,10 +70,9 @@ var PB_Modal = (function () {
             if (_cfg.canDelete) {
                 $('#rb-delete-allocation').show();
             }
-            // Show reassign + remove-person buttons for task allocations.
-            // Only needs delete + create permission (server enforces both).
-            if (alloc.type === 'task' && alloc.task_id
-                    && (_cfg.canDelete || _cfg.canCreate || _cfg.canEdit)) {
+            // Show reassign + remove-person for any allocation that has a task_id.
+            // Server-side enforces auth; no need to repeat the permission check here.
+            if (alloc.task_id) {
                 $('#rb-reassign-allocation').show();
                 $('#rb-remove-person-allocation').show();
             }

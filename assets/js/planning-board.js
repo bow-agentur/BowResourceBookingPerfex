@@ -144,11 +144,12 @@ var PlanningBoard = (function () {
             if (tid) PB_Modal.fetchTaskDates(tid);
         });
 
-        // Double-click on allocation bar → edit modal (admin only)
+        // Single click on allocation bar → edit modal (admin only)
         // Note: rawId can be a numeric override ID (e.g. 42) or a synthetic task ID
         // (e.g. "t_5_123") — we open the modal for both cases.
+        // Empty-cell dblclick still opens the create-new modal independently.
         if (!config.isEmployee) {
-            $('#rb-board-body').on('dblclick', '.rb-allocation[data-id]', function (e) {
+            $('#rb-board-body').on('click', '.rb-allocation[data-id]', function (e) {
                 e.stopPropagation();
                 var rawId = $(this).data('id');
                 if (rawId !== undefined && rawId !== null && rawId !== '') {
