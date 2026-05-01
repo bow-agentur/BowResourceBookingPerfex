@@ -147,17 +147,21 @@ var PlanningBoard = (function () {
         });
 
         // Single click on allocation bar → edit modal (any user with edit/delete/create permission)
-        // Note: rawId can be a numeric override ID (e.g. 42) or a synthetic task ID
-        // (e.g. "t_5_123") — we open the modal for both cases.
-        // Empty-cell dblclick still opens the create-new modal independently.
+        console.log('[PB] _bindEvents permissions: canEdit=', config.canEdit, 'canDelete=', config.canDelete, 'canCreate=', config.canCreate, 'isEmployee=', config.isEmployee);
         if (config.canEdit || config.canDelete || config.canCreate) {
+            console.log('[PB] bar click handler BOUND');
             $('#rb-board-body').on('click', '.rb-allocation[data-id]', function (e) {
                 e.stopPropagation();
                 var rawId = $(this).data('id');
+                console.log('[PB] bar clicked, rawId=', rawId, 'element=', this.className, 'data-id attr=', $(this).attr('data-id'));
                 if (rawId !== undefined && rawId !== null && rawId !== '') {
                     PB_Modal.openAllocationModal(rawId);
+                } else {
+                    console.warn('[PB] rawId is empty/undefined — modal not opened');
                 }
             });
+        } else {
+            console.warn('[PB] bar click handler NOT BOUND — all permissions false');
         }
 
         // Double-click on empty lane cell → create modal (admin only)
