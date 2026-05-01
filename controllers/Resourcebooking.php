@@ -60,7 +60,10 @@ class Resourcebooking extends AdminController
     $data['staff']     = $staff;
     $data['projects']  = $projects;
     // v2.0: employee vs. admin distinction
-    $data['is_employee']  = !is_admin();
+    // isEmployee = true only when the user has NO edit/create/delete access at all → pure read-only
+    $data['is_employee']  = !has_permission('resourcebooking', '', 'create')
+                         && !has_permission('resourcebooking', '', 'edit')
+                         && !has_permission('resourcebooking', '', 'delete');
     $data['own_staff_id'] = get_staff_user_id();
 
     $this->load->view('planning_board', $data);

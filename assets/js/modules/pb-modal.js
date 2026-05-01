@@ -26,7 +26,8 @@ var PB_Modal = (function () {
     // =========================================================================
 
     function openAllocationModal(id, staffId, date) {
-        if (_cfg.isEmployee) return; // read-only for non-admins
+        // Read-only when user has no edit/create/delete permission
+        if (!_cfg.canEdit && !_cfg.canCreate && !_cfg.canDelete) return;
 
         var $modal = $('#rb-allocation-modal');
         var $form  = $('#rb-allocation-form')[0];
