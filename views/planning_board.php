@@ -291,13 +291,12 @@
                     </div>
                 </form>
             </div>
-            <div class="modal-footer" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;">
-                <!-- Left action buttons: hidden in create-new mode, shown in edit mode -->
-                <div id="rb-modal-action-buttons" style="display:none;flex-wrap:wrap;gap:6px;">
+            <div class="modal-footer" style="display:flex;flex-direction:column;gap:8px;padding:12px 15px;">
+                <!-- Row 1: destructive/task actions — only visible when editing an existing allocation -->
+                <div id="rb-modal-action-buttons" style="display:none;width:100%;gap:6px;">
                     <button type="button" class="btn btn-danger" id="rb-delete-allocation">
                         <i class="fa fa-trash"></i> <?php echo _l('delete'); ?>
                     </button>
-                    <!-- Shown only when editing an existing task allocation -->
                     <button type="button" class="btn btn-warning" id="rb-reassign-allocation" style="display:none;">
                         <i class="fa fa-exchange"></i> <?php echo _l('reassign_task'); ?>
                     </button>
@@ -305,8 +304,8 @@
                         <i class="fa fa-user-times"></i> <?php echo _l('remove_from_task'); ?>
                     </button>
                 </div>
-                <!-- Right: standard actions -->
-                <div style="display:flex;gap:6px;">
+                <!-- Row 2: cancel left, save right — always visible -->
+                <div style="display:flex;justify-content:space-between;width:100%;">
                     <button type="button" class="btn btn-default" data-dismiss="modal"><?php echo _l('cancel'); ?></button>
                     <button type="button" class="btn btn-primary" id="rb-save-allocation">
                         <?php echo _l('save_allocation'); ?>
