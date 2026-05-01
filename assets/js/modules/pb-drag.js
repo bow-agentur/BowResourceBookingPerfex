@@ -23,13 +23,16 @@ var PB_Drag = (function () {
     // =========================================================================
 
     function initDragDrop() {
-        if (typeof interact === 'undefined') return;
+        // Drag & drop disabled — bars are opened via click (mousedown/mouseup in planning-board.js)
+        // Clear any previous interact bindings left over from old code
+        if (typeof interact !== 'undefined') {
+            try { interact('.rb-project-bar, .rb-task-bar').unset(); } catch (e) {}
+        }
+    }
 
-        // Clear any previous interact bindings to avoid duplicates
-        try { interact('.rb-project-bar, .rb-task-bar').unset(); } catch (e) {}
-
-        if (!_cfg.canEdit) return; // drag/resize only for users with edit permission
-
+    /* ---- dead code below, kept for potential future re-enable ---- */
+    function _initDragDropDisabled() {
+        if (!_cfg.canEdit) return;
         interact('.rb-project-bar, .rb-task-bar')
             .draggable({
                 inertia:    false,

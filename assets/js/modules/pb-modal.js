@@ -164,26 +164,23 @@ var PB_Modal = (function () {
      * Optionally pre-selects a task by ID (for edit mode).
      */
     function loadTasksDropdown(projectId, selectedTaskId) {
-        _taskCache = {}; // Reset cache for this project
+        _taskCache = {};
         $.ajax({
             url:      _cfg.apiUrl + '/api_get_tasks',
             type:     'GET',
-            data:     { project_id: projectId, staff_id: $('#rb-alloc-staff').val() || '' },
+            data:     { project_id: projectId },
             dataType: 'json',
             success:  function (r) {
                 var $s = $('#rb-alloc-task');
                 $s.empty().append('<option value="">— kein Task —</option>');
                 (r.tasks || []).forEach(function (t) {
-                    // Cache task data for date auto-fill
                     _taskCache[t.id] = t;
                     var label = PB_Utils.escHtml(t.name);
                     if (t.estimated_hours) label += ' (' + t.estimated_hours + 'h)';
-                    $s.append(
-                        '<option value="' + t.id + '"'
-                        + (String(t.id) === String(selectedTaskId) ? ' selected' : '')
-                        + '>' + label + '</option>'
-                    );
+                    $s.append('<option value="' + t.id + '">' + label + '</option>');
                 });
+                // Use .val() for reliable Bootstrap Select pre-selection
+                if (selectedTaskId) $s.val(String(selectedTaskId));
                 $s.selectpicker('refresh');
             }
         });
@@ -275,28 +272,31 @@ var PB_Modal = (function () {
     }
 
     // =========================================================================
-    // DELETE ALLOCATION
+    // DELETE ALLOCATION (delete planning override only — person stays on task)
     // =========================================================================
 
     function deleteAllocation() {
         var id = $('#rb-alloc-id').val();
         if (!id) return;
-        var confirmMsg = (_cfg.lang && _cfg.lang.confirmDelete) || 'Wirklich löschen?';
-        if (!confirm(confirmMsg)) return;
+        var isNumericId = /^\d+$/.test(String(id));
 
-        var alloc = _st.allocations.find(function (a) { return String(a.id) === String(id); });
+        if (!isNumericId) {
+            // Synthetic ID = no override record exists, nothing to delete here.
+            // Direct the user to "Von task entfernen" if they want to unassign.
+            alert_float('info', 'Kein Planungs-Override vorhanden. Nutze "Von Task entfernen" um die Zuweisung zu löschen.');
+            return;
+        }
+
+        if (!confirm('Planungs-Eintrag löschen? Die Person bleibt dem Task/Projekt zugewiesen (die Standarddaten des Tasks gelten dann wieder).')) return;
+
         $.ajax({
-            url:  _cfg.apiUrl + '/api_remove_member',
-            type: 'POST',
-            data: {
-                staff_id:   alloc ? alloc.staff_id   : '',
-                project_id: alloc ? alloc.project_id : '',
-                task_id:    alloc ? alloc.task_id    : ''
-            },
+            url:      _cfg.apiUrl + '/api_allocation/' + id,
+            type:     'POST',
+            data:     { _method: 'DELETE' },
             dataType: 'json',
             success: function () {
                 $('#rb-allocation-modal').modal('hide');
-                alert_float('success', 'Gelöscht');
+                alert_float('success', 'Planung gelöscht');
                 _reload();
             },
             error: function () { alert_float('danger', 'Fehler beim Löschen'); }
@@ -414,7 +414,7 @@ var PB_Modal = (function () {
     }
 
     // =========================================================================
-    // REMOVE PERSON FROM TASK (unassign only — keeps task, just removes this person)
+    // REMOVE PERSON FROM TASK (fully unassign — removes task assignment + override)
     // =========================================================================
 
     function removePersonFromTask() {
@@ -422,17 +422,19 @@ var PB_Modal = (function () {
         var alloc = _st.allocations.find(function (a) { return String(a.id) === String(id); });
         if (!alloc || !alloc.task_id) return;
         var name = ($('#rb-alloc-staff option:selected').text() || 'Person').trim();
-        if (!confirm(name + ' vom Task entfernen?')) return;
+        if (!confirm(name + ' vollständig vom Task entfernen?')) return;
 
         var isNumericId = /^\d+$/.test(String(id));
         var errLang = (_cfg.lang && _cfg.lang.errorSaving) || 'Fehler';
+
+        // Remove person from task assignment in Perfex
         $.ajax({
             url:      _cfg.apiUrl + '/api_remove_member',
             type:     'POST',
             data:     { staff_id: alloc.staff_id, task_id: alloc.task_id, project_id: alloc.project_id || '' },
             dataType: 'json',
             success: function () {
-                // Only delete the DB override record if it has a real numeric ID
+                // Also delete the override record if one exists
                 if (isNumericId) {
                     $.ajax({
                         url:  _cfg.apiUrl + '/api_allocation/' + id,

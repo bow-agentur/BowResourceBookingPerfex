@@ -615,6 +615,10 @@ class Resourcebooking extends AdminController
 
     if ($task_id) {
       $ok = $this->rb_planning_model->assign_staff_to_task($staff_id, $task_id);
+      // Also ensure the person is a project member so the project bar appears on the board
+      if ($project_id) {
+        $this->rb_planning_model->assign_staff_to_project($staff_id, $project_id);
+      }
     } elseif ($project_id) {
       $ok = $this->rb_planning_model->assign_staff_to_project($staff_id, $project_id);
     } else {

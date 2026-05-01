@@ -518,10 +518,7 @@ var PB_Render = (function () {
             }
         }
 
-        if (_cfg.canEdit && isNumericId) {
-            h += '<div class="rb-resize-handle rb-resize-left"></div>'
-               + '<div class="rb-resize-handle rb-resize-right"></div>';
-        }
+        // Resize handles removed (drag & drop disabled)
 
         h += '</div>';
         return h;

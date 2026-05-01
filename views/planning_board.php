@@ -174,23 +174,10 @@
             <div class="modal-body">
                 <form id="rb-allocation-form">
                     <input type="hidden" name="id" id="rb-alloc-id">
-                    
-                    <div class="form-group">
-                        <label for="rb-alloc-staff"><?php echo _l('staff_member'); ?> <span class="text-danger">*</span></label>
-                        <select name="staff_id" id="rb-alloc-staff" class="selectpicker" 
-                                data-live-search="true" data-width="100%" required>
-                            <option value=""><?php echo _l('dropdown_non_selected_tex'); ?></option>
-                            <?php foreach($staff as $member): ?>
-                            <option value="<?php echo $member['staffid']; ?>">
-                                <?php echo $member['firstname'] . ' ' . $member['lastname']; ?>
-                            </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    
+
                     <div class="form-group">
                         <label for="rb-alloc-project"><?php echo _l('project'); ?></label>
-                        <select name="project_id" id="rb-alloc-project" class="selectpicker" 
+                        <select name="project_id" id="rb-alloc-project" class="selectpicker"
                                 data-live-search="true" data-width="100%">
                             <option value=""><?php echo _l('no_project'); ?></option>
                             <?php foreach($projects as $project): ?>
@@ -209,6 +196,19 @@
                             <option value=""><?php echo _l('no_task'); ?></option>
                         </select>
                         <small class="text-muted"><?php echo _l('task_auto_fills_dates'); ?></small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rb-alloc-staff"><?php echo _l('staff_member'); ?> <span class="text-danger">*</span></label>
+                        <select name="staff_id" id="rb-alloc-staff" class="selectpicker"
+                                data-live-search="true" data-width="100%" required>
+                            <option value=""><?php echo _l('dropdown_non_selected_tex'); ?></option>
+                            <?php foreach($staff as $member): ?>
+                            <option value="<?php echo $member['staffid']; ?>">
+                                <?php echo $member['firstname'] . ' ' . $member['lastname']; ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     
                     <div class="row">
@@ -394,7 +394,6 @@
 
 <!-- Planning Board Assets -->
 <link rel="stylesheet" href="<?php echo module_dir_url('resourcebooking', 'assets/css/planning-board.css'); ?>?v=<?php echo time(); ?>">
-<script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.18/dist/interact.min.js"></script>
 <script src="<?php echo module_dir_url('resourcebooking', 'assets/js/modules/pb-utils.js'); ?>?v=<?php echo time(); ?>"></script>
 <script src="<?php echo module_dir_url('resourcebooking', 'assets/js/modules/pb-render.js'); ?>?v=<?php echo time(); ?>"></script>
 <script src="<?php echo module_dir_url('resourcebooking', 'assets/js/modules/pb-drag.js'); ?>?v=<?php echo time(); ?>"></script>
