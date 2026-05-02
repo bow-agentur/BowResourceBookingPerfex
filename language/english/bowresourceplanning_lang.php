@@ -20,7 +20,6 @@ $lang['allocation_created'] = 'Allocation created successfully';
 $lang['allocation_updated'] = 'Allocation updated successfully';
 $lang['allocation_deleted'] = 'Allocation deleted successfully';
 $lang['allocation_moved'] = 'Allocation moved successfully';
-$lang['hours_per_day'] = 'Hours per day';
 $lang['total_hours'] = 'Total hours';
 $lang['include_weekends'] = 'Include weekends';
 $lang['note'] = 'Note';
@@ -37,7 +36,6 @@ $lang['capacity_utilization'] = 'Utilization';
 $lang['capacity_percent'] = '%s%% utilized';
 $lang['allocated'] = 'allocated';
 $lang['utilization'] = 'Utilization';
-$lang['no_allocations'] = 'No allocations';
 
 // Work Patterns
 $lang['work_pattern'] = 'Work Pattern';

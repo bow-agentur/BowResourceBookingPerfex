@@ -1,0 +1,17 @@
+{
+    "name": "bow-agentur/bow-resource-planning",
+    "description": "BOW Resource Planning Perfex CRM Module",
+    "type": "perfex-module",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "BowRP\\Tests\\": "tests/"
+        }
+    }
+}

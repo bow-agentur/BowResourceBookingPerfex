@@ -424,7 +424,7 @@ $(function () {
         $('#rb-total-allocated').text((totals.allocated || 0).toFixed(1) + 'h');
         $('#rb-total-remaining').text((totals.remaining || 0).toFixed(1) + 'h');
         $('#rb-total-utilization').text(util + '%');
-        $('#rb-total-overbooking').text((totals.overbooking_count || 0) > 0
+        $('#rb-total-overbooking').html((totals.overbooking_count || 0) > 0
             ? totals.overbooking_count + ' <?php echo _l("staff_members"); ?>' : '&mdash;');
 
         // Projects table
@@ -466,7 +466,7 @@ $(function () {
         });
         $('#rb-tasks-tbody').html(ttbody || '<tr><td colspan="10" class="text-center text-muted"><?php echo _l("no_records_found"); ?></td></tr>');
         $('#rb-tasks-total-alloc').text(totalAlloc.toFixed(1) + 'h');
-        $('#rb-tasks-total-est').text(totalEst > 0 ? totalEst.toFixed(1) + 'h' : '&mdash;');
+        $('#rb-tasks-total-est').html(totalEst > 0 ? totalEst.toFixed(1) + 'h' : '&mdash;');
 
         // Charts
         renderUtilChart(staffData);

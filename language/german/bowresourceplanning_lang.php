@@ -20,7 +20,6 @@ $lang['allocation_created'] = 'Zuweisung erfolgreich erstellt';
 $lang['allocation_updated'] = 'Zuweisung erfolgreich aktualisiert';
 $lang['allocation_deleted'] = 'Zuweisung erfolgreich gelöscht';
 $lang['allocation_moved'] = 'Zuweisung erfolgreich verschoben';
-$lang['hours_per_day'] = 'Stunden pro Tag';
 $lang['total_hours'] = 'Gesamtstunden';
 $lang['include_weekends'] = 'Wochenenden einschließen';
 $lang['note'] = 'Notiz';
@@ -37,7 +36,6 @@ $lang['capacity_utilization'] = 'Auslastung';
 $lang['capacity_percent'] = '%s%% ausgelastet';
 $lang['allocated'] = 'zugewiesen';
 $lang['utilization'] = 'Auslastung';
-$lang['no_allocations'] = 'Keine Zuweisungen';
 
 // Arbeitsmuster
 $lang['work_pattern'] = 'Arbeitsmuster';
