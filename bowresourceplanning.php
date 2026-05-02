@@ -1,0 +1,126 @@
+<?php
+
+defined('BASEPATH') or exit('No direct script access allowed');
+
+/*
+Module Name: BOW Booking
+Module URI: https://bow-agentur.de
+Description: Management of Resources in Agencies
+Version: 1.0.0
+Requires at least: 2.3.*
+Author: BOW E-Commerce Agentur GmbH
+Author URI: https://bow-agentur.de
+*/
+
+define('RESOURCEBOOKING_MODULE', 'bowresourceplanning');
+
+define('RESOURCEBOOKING_MODULE_UPLOAD_FOLDER', module_dir_path(RESOURCEBOOKING_MODULE, 'uploads'));
+hooks()->add_action('admin_init', 'bowresourceplanning_permissions');
+hooks()->add_action('admin_init', 'bowresourceplanning_module_init_menu_items');
+
+// Task hooks: persist estimated_hours when tasks are created/updated
+hooks()->add_filter('before_add_task', 'bowresourceplanning_before_add_task');
+hooks()->add_filter('before_update_task', 'bowresourceplanning_before_update_task');
+
+/**
+* Register activation module hook
+*/
+register_activation_hook(RESOURCEBOOKING_MODULE, 'bowresourceplanning_module_activation_hook');
+/**
+* Load the module helper
+*/
+$CI = & get_instance();
+$CI->load->helper(RESOURCEBOOKING_MODULE . '/rb_capacity');
+
+function bowresourceplanning_module_activation_hook()
+{
+    $CI = &get_instance();
+    require_once(__DIR__ . '/install.php');
+}
+
+/**
+* Register language files, must be registered if the module is using languages
+*/
+register_language_files(RESOURCEBOOKING_MODULE, [RESOURCEBOOKING_MODULE]);
+
+/**
+ * Init goals module menu items in setup in admin_init hook
+ * @return null
+ */
+function bowresourceplanning_module_init_menu_items()
+{
+    
+    $CI = &get_instance();
+    if (has_permission('bowresourceplanning', '', 'view')) {
+        $CI->app_menu->add_sidebar_menu_item('resource-booking', [
+            'name'     => _l('bowresourceplanning'),
+            'icon'     => 'fa fa-calendar',
+            'position' => 50,
+        ]);
+
+        // NEU: Planning Board (Float-ähnlich) - Hauptfeature
+        $CI->app_menu->add_sidebar_children_item('resource-booking', [
+            'slug'     => 'planning-board',
+            'name'     => _l('planning_board'),
+            'icon'     => 'fa fa-th',
+            'href'     => admin_url('bowresourceplanning/planning_board'),
+            'position' => 1,
+        ]);
+
+        // Reports — only for managers/admins (not pure read-only employees)
+        if (is_admin() || has_permission('bowresourceplanning', '', 'create') || has_permission('bowresourceplanning', '', 'edit')) {
+            $CI->app_menu->add_sidebar_children_item('resource-booking', [
+                'slug'     => 'rb-reports',
+                'name'     => _l('rb_reports'),
+                'icon'     => 'fa fa-bar-chart',
+                'href'     => admin_url('bowresourceplanning/reports'),
+                'position' => 2,
+            ]);
+        }
+    }
+    
+}
+
+function bowresourceplanning_permissions()
+{
+    $capabilities = [];
+
+    $capabilities['capabilities'] = [
+            'view'   => _l('permission_view') . ' (' . _l('permission_global') . ')',
+            'create' => _l('permission_create'),
+            'edit'   => _l('permission_edit'),
+            'delete' => _l('permission_delete'),
+    ];
+
+    register_staff_capabilities('bowresourceplanning', $capabilities, _l('bowresourceplanning'));
+}
+
+/**
+ * Hook: persist estimated_hours when a new task is created
+ *
+ * @param array $data Task data passed by reference
+ */
+function bowresourceplanning_before_add_task($data)
+{
+    $CI = &get_instance();
+    $estimated = $CI->input->post('estimated_hours');
+    if ($estimated !== null && $estimated !== '') {
+        $data['estimated_hours'] = max(0, (float)$estimated);
+    }
+    return $data;
+}
+
+/**
+ * Hook: persist estimated_hours when an existing task is updated
+ *
+ * @param array $data Task data passed by reference
+ */
+function bowresourceplanning_before_update_task($data)
+{
+    $CI = &get_instance();
+    $estimated = $CI->input->post('estimated_hours');
+    if ($estimated !== null && $estimated !== '') {
+        $data['estimated_hours'] = max(0, (float)$estimated);
+    }
+    return $data;
+}

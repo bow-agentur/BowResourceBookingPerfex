@@ -6,7 +6,7 @@ defined("BASEPATH") or exit("No direct script access allowed");
  * BOW Booking Controller
  * Float-ähnliche Ressourcenplanung für Perfex CRM
  */
-class Resourcebooking extends AdminController
+class Bowresourceplanning extends AdminController
 {
   public function __construct()
   {
@@ -18,7 +18,7 @@ class Resourcebooking extends AdminController
    */
   public function index()
   {
-    redirect(admin_url('resourcebooking/planning_board'));
+    redirect(admin_url('bowresourceplanning/planning_board'));
   }
 
   // ==========================================================================
@@ -30,11 +30,11 @@ class Resourcebooking extends AdminController
    */
   public function planning_board()
   {
-    if (!has_permission('resourcebooking', '', 'view')) {
-      access_denied('resourcebooking');
+    if (!has_permission('bowresourceplanning', '', 'view')) {
+      access_denied('bowresourceplanning');
     }
 
-    $this->load->model('resourcebooking/rb_planning_model');
+    $this->load->model('bowresourceplanning/rb_planning_model');
 
     // Default: aktuelle Woche
     $date_from = $this->input->get('date_from') ?: date('Y-m-d', strtotime('monday this week'));
@@ -59,6 +59,12 @@ class Resourcebooking extends AdminController
     $data['date_to']   = $date_to;
     $data['staff']     = $staff;
     $data['projects']  = $projects;
+    // v2.0: employee vs. admin distinction
+    // isEmployee = true only when the user has NO edit/create/delete access at all → pure read-only
+    $data['is_employee']  = !has_permission('bowresourceplanning', '', 'create')
+                         && !has_permission('bowresourceplanning', '', 'edit')
+                         && !has_permission('bowresourceplanning', '', 'delete');
+    $data['own_staff_id'] = get_staff_user_id();
 
     $this->load->view('planning_board', $data);
   }
@@ -68,11 +74,11 @@ class Resourcebooking extends AdminController
    */
   public function reports()
   {
-    if (!has_permission('resourcebooking', '', 'view')) {
-      access_denied('resourcebooking');
+    if (!is_admin() && !has_permission('bowresourceplanning', '', 'create') && !has_permission('bowresourceplanning', '', 'edit')) {
+      access_denied('bowresourceplanning');
     }
 
-    $this->load->model('resourcebooking/rb_planning_model');
+    $this->load->model('bowresourceplanning/rb_planning_model');
 
     // Staff als Array laden
     $staff_objects = $this->staff_model->get('', ['active' => 1]);
@@ -94,6 +100,7 @@ class Resourcebooking extends AdminController
     $data['title']    = _l('rb_reports');
     $data['staff']    = $staff;
     $data['time_off'] = $time_off;
+    $data['projects'] = $this->rb_planning_model->get_active_projects();
 
     $this->load->view('reports', $data);
   }
@@ -110,7 +117,7 @@ class Resourcebooking extends AdminController
     header('Content-Type: application/json');
     
     try {
-      if (!has_permission('resourcebooking', '', 'view')) {
+      if (!has_permission('bowresourceplanning', '', 'view')) {
         $this->output->set_status_header(403);
         echo json_encode(['success' => false, 'error' => 'Access denied']);
         return;
@@ -124,7 +131,7 @@ class Resourcebooking extends AdminController
         return;
       }
 
-      $this->load->model('resourcebooking/rb_planning_model');
+      $this->load->model('bowresourceplanning/rb_planning_model');
 
       $date_from = $this->input->get('start_date') ?: $this->input->get('date_from') ?: date('Y-m-d', strtotime('monday this week'));
       $date_to   = $this->input->get('end_date') ?: $this->input->get('date_to') ?: date('Y-m-d', strtotime('sunday this week'));
@@ -150,16 +157,16 @@ class Resourcebooking extends AdminController
   {
     header('Content-Type: application/json');
     
-    if (!has_permission('resourcebooking', '', 'view')) {
+    if (!has_permission('bowresourceplanning', '', 'view')) {
       $this->output->set_status_header(403);
       echo json_encode(['error' => 'Access denied']);
       return;
     }
 
-    $this->load->model('resourcebooking/rb_planning_model');
+    $this->load->model('bowresourceplanning/rb_planning_model');
 
     if ($this->input->method() === 'post') {
-      if (!has_permission('resourcebooking', '', 'create')) {
+      if (!has_permission('bowresourceplanning', '', 'create')) {
         $this->output->set_status_header(403);
         echo json_encode(['error' => 'Access denied']);
         return;
@@ -224,11 +231,11 @@ class Resourcebooking extends AdminController
       return;
     }
 
-    $this->load->model('resourcebooking/rb_planning_model');
+    $this->load->model('bowresourceplanning/rb_planning_model');
 
     // DELETE
     if ($this->input->method() === 'delete' || $this->input->post('_method') === 'DELETE') {
-      if (!has_permission('resourcebooking', '', 'delete')) {
+      if (!has_permission('bowresourceplanning', '', 'delete')) {
         $this->output->set_status_header(403);
         echo json_encode(['error' => 'Access denied']);
         return;
@@ -244,7 +251,7 @@ class Resourcebooking extends AdminController
 
     // PUT/PATCH - Update
     if ($this->input->method() === 'post' || $this->input->method() === 'put') {
-      if (!has_permission('resourcebooking', '', 'edit')) {
+      if (!has_permission('bowresourceplanning', '', 'edit')) {
         $this->output->set_status_header(403);
         echo json_encode(['error' => 'Access denied']);
         return;
@@ -301,13 +308,13 @@ class Resourcebooking extends AdminController
       return;
     }
 
-    if (!has_permission('resourcebooking', '', 'edit')) {
+    if (!has_permission('bowresourceplanning', '', 'edit')) {
       $this->output->set_status_header(403);
       echo json_encode(['error' => 'Access denied']);
       return;
     }
 
-    $this->load->model('resourcebooking/rb_planning_model');
+    $this->load->model('bowresourceplanning/rb_planning_model');
 
     $data = [
       'date_from' => $this->input->post('date_from'),
@@ -332,11 +339,11 @@ class Resourcebooking extends AdminController
   public function api_time_off($id = '')
   {
     header('Content-Type: application/json');
-    $this->load->model('resourcebooking/rb_planning_model');
+    $this->load->model('bowresourceplanning/rb_planning_model');
 
     // DELETE
     if ($id && ($this->input->method() === 'delete' || $this->input->post('_method') === 'DELETE')) {
-      if (!has_permission('resourcebooking', '', 'delete')) {
+      if (!has_permission('bowresourceplanning', '', 'delete')) {
         $this->output->set_status_header(403);
         echo json_encode(['error' => 'Access denied']);
         return;
@@ -349,7 +356,7 @@ class Resourcebooking extends AdminController
 
     // POST: Create
     if ($this->input->method() === 'post' && !$id) {
-      if (!has_permission('resourcebooking', '', 'create')) {
+      if (!has_permission('bowresourceplanning', '', 'create')) {
         $this->output->set_status_header(403);
         echo json_encode(['error' => 'Access denied']);
         return;
@@ -372,7 +379,7 @@ class Resourcebooking extends AdminController
 
     // PUT: Update
     if ($id && $this->input->method() === 'post') {
-      if (!has_permission('resourcebooking', '', 'edit')) {
+      if (!has_permission('bowresourceplanning', '', 'edit')) {
         $this->output->set_status_header(403);
         echo json_encode(['error' => 'Access denied']);
         return;
@@ -392,7 +399,7 @@ class Resourcebooking extends AdminController
     }
 
     // GET
-    if (!has_permission('resourcebooking', '', 'view')) {
+    if (!has_permission('bowresourceplanning', '', 'view')) {
       $this->output->set_status_header(403);
       echo json_encode(['error' => 'Access denied']);
       return;
@@ -416,13 +423,13 @@ class Resourcebooking extends AdminController
   {
     header('Content-Type: application/json');
     
-    if (!has_permission('resourcebooking', '', 'view')) {
+    if (!has_permission('bowresourceplanning', '', 'view')) {
       $this->output->set_status_header(403);
       echo json_encode(['error' => 'Access denied']);
       return;
     }
 
-    $this->load->model('resourcebooking/rb_planning_model');
+    $this->load->model('bowresourceplanning/rb_planning_model');
     $patterns = $this->rb_planning_model->get_work_patterns($staff_id ?: null);
     echo json_encode(['work_patterns' => $patterns]);
   }
@@ -435,16 +442,17 @@ class Resourcebooking extends AdminController
     header('Content-Type: application/json');
     
     try {
-      if (!has_permission('resourcebooking', '', 'view')) {
+      if (!has_permission('bowresourceplanning', '', 'view')) {
         echo json_encode(['success' => false, 'error' => 'Access denied']);
         return;
       }
 
-      $this->load->model('resourcebooking/rb_planning_model');
+      $this->load->model('bowresourceplanning/rb_planning_model');
 
       $date_from = $this->input->get('start_date') ?: date('Y-m-01');
       $date_to   = $this->input->get('end_date') ?: date('Y-m-t');
       $staff_id  = $this->input->get('staff_id') ?: null;
+      $project_id = $this->input->get('project_id') ?: null;
 
       $filters = $staff_id ? ['staff_ids' => [$staff_id]] : [];
       $staff_list = $this->rb_planning_model->get_staff_with_capacity($date_from, $date_to, $filters);
@@ -479,6 +487,7 @@ class Resourcebooking extends AdminController
       }
       
       $project_hours = $this->rb_planning_model->get_allocations_by_project($date_from, $date_to, $staff_id);
+      $task_details  = $this->rb_planning_model->get_tasks_for_report($date_from, $date_to, $staff_id, $project_id);
       $time_off_summary = $this->rb_planning_model->get_time_off_summary($date_from, $date_to, $staff_id);
 
       echo json_encode([
@@ -495,6 +504,7 @@ class Resourcebooking extends AdminController
           ],
           'staff_summary' => $staff_summary,
           'project_hours' => $project_hours,
+          'task_details'  => $task_details,
           'time_off_summary' => $time_off_summary
         ]
       ]);
@@ -510,13 +520,13 @@ class Resourcebooking extends AdminController
   {
     header('Content-Type: application/json');
     
-    if (!has_permission('resourcebooking', '', 'view')) {
+    if (!has_permission('bowresourceplanning', '', 'view')) {
       $this->output->set_status_header(403);
       echo json_encode(['error' => 'Access denied']);
       return;
     }
 
-    $this->load->model('resourcebooking/rb_planning_model');
+    $this->load->model('bowresourceplanning/rb_planning_model');
 
     $staff_ids = $this->input->get('staff_ids');
     $date_from = $this->input->get('date_from') ?: date('Y-m-d', strtotime('monday this week'));
@@ -540,13 +550,13 @@ class Resourcebooking extends AdminController
   {
     header('Content-Type: application/json');
     
-    if (!has_permission('resourcebooking', '', 'view')) {
+    if (!has_permission('bowresourceplanning', '', 'view')) {
       $this->output->set_status_header(403);
       echo json_encode(['error' => 'Access denied']);
       return;
     }
 
-    $this->load->model('resourcebooking/rb_planning_model');
+    $this->load->model('bowresourceplanning/rb_planning_model');
 
     $date_from = $this->input->get('date_from') ?: date('Y-m-d', strtotime('monday this week'));
     $date_to   = $this->input->get('date_to') ?: date('Y-m-d', strtotime('sunday this week'));
@@ -562,14 +572,254 @@ class Resourcebooking extends AdminController
   {
     header('Content-Type: application/json');
     
-    if (!has_permission('resourcebooking', '', 'view')) {
+    if (!has_permission('bowresourceplanning', '', 'view')) {
       $this->output->set_status_header(403);
       echo json_encode(['error' => 'Access denied']);
       return;
     }
 
-    $this->load->model('resourcebooking/rb_planning_model');
+    $this->load->model('bowresourceplanning/rb_planning_model');
     $projects = $this->rb_planning_model->get_active_projects();
     echo json_encode(['projects' => $projects]);
+  }
+
+  // ===========================================================================
+  // PLANNING BOARD v2.0 — Live-Write API
+  // ===========================================================================
+
+  /**
+   * API: Assign staff member to project or task (writes to Perfex)
+   * POST: staff_id, project_id [, task_id]
+   */
+  public function api_assign_member()
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('bowresourceplanning', '', 'create')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['success' => false, 'error' => 'Access denied']);
+      return;
+    }
+
+    $this->load->model('bowresourceplanning/rb_planning_model');
+
+    $staff_id   = (int)$this->input->post('staff_id');
+    $project_id = (int)$this->input->post('project_id');
+    $task_id    = (int)$this->input->post('task_id');
+
+    if (!$staff_id) {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'staff_id required']);
+      return;
+    }
+
+    if ($task_id) {
+      $ok = $this->rb_planning_model->assign_staff_to_task($staff_id, $task_id);
+      // Also ensure the person is a project member so the project bar appears on the board
+      if ($project_id) {
+        $this->rb_planning_model->assign_staff_to_project($staff_id, $project_id);
+      }
+    } elseif ($project_id) {
+      $ok = $this->rb_planning_model->assign_staff_to_project($staff_id, $project_id);
+    } else {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'project_id or task_id required']);
+      return;
+    }
+
+    // Automatically add the staff member as a project follower when a project is assigned
+    if ($project_id) {
+      $this->rb_planning_model->add_project_follower($staff_id, $project_id);
+    }
+
+    echo json_encode(['success' => (bool)$ok]);
+  }
+
+  /**
+   * API: Remove staff member from project or task
+   * POST: staff_id, project_id [, task_id]
+   */
+  public function api_remove_member()
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('bowresourceplanning', '', 'delete')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['success' => false, 'error' => 'Access denied']);
+      return;
+    }
+
+    $this->load->model('bowresourceplanning/rb_planning_model');
+
+    $staff_id   = (int)$this->input->post('staff_id');
+    $project_id = (int)$this->input->post('project_id');
+    $task_id    = (int)$this->input->post('task_id');
+
+    if (!$staff_id) {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'staff_id required']);
+      return;
+    }
+
+    if ($task_id) {
+      $ok = $this->rb_planning_model->remove_staff_from_task($staff_id, $task_id);
+    } elseif ($project_id) {
+      $ok = $this->rb_planning_model->remove_staff_from_project($staff_id, $project_id);
+    } else {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'project_id or task_id required']);
+      return;
+    }
+
+    echo json_encode(['success' => (bool)$ok]);
+  }
+
+  /**
+   * API: Update estimated_hours on a task
+   * POST: task_id, estimated_hours
+   */
+  public function api_update_task_hours()
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('bowresourceplanning', '', 'edit')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['success' => false, 'error' => 'Access denied']);
+      return;
+    }
+
+    $this->load->model('bowresourceplanning/rb_planning_model');
+
+    $task_id         = (int)$this->input->post('task_id');
+    $estimated_hours = $this->input->post('estimated_hours');
+
+    if (!$task_id || $estimated_hours === null) {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'task_id and estimated_hours required']);
+      return;
+    }
+
+    $ok = $this->rb_planning_model->update_task_hours($task_id, $estimated_hours);
+    echo json_encode(['success' => (bool)$ok]);
+  }
+
+  /**
+   * API: UPSERT planning override in rb_allocations
+   * POST: staff_id, project_id [, task_id], hours_per_day, color, note, date_from, date_to
+   */
+  public function api_upsert_override()
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('bowresourceplanning', '', 'edit')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['success' => false, 'error' => 'Access denied']);
+      return;
+    }
+
+    $this->load->model('bowresourceplanning/rb_planning_model');
+
+    $data = [
+      'staff_id'        => $this->input->post('staff_id'),
+      'project_id'      => $this->input->post('project_id') ?: null,
+      'task_id'         => $this->input->post('task_id') ?: null,
+      'hours_per_day'   => $this->input->post('hours_per_day'),
+      'color'           => $this->input->post('color'),
+      'note'            => $this->input->post('note'),
+      'date_from'       => $this->input->post('date_from'),
+      'date_to'         => $this->input->post('date_to'),
+      'include_weekends'=> $this->input->post('include_weekends'),
+    ];
+
+    if (empty($data['staff_id'])) {
+      $this->output->set_status_header(400);
+      echo json_encode(['success' => false, 'error' => 'staff_id required']);
+      return;
+    }
+
+    $id = $this->rb_planning_model->upsert_override($data);
+
+    // If a task is linked, write total estimated hours back to the task
+    // so the task always reflects the planned effort from the board.
+    if ($id && !empty($data['task_id']) && !empty($data['hours_per_day'])
+        && !empty($data['date_from']) && !empty($data['date_to'])) {
+      $this->load->helper('bowresourceplanning/rb_capacity');
+      $include_weekends = !empty($data['include_weekends']);
+      if ($include_weekends) {
+        $d1   = new DateTime($data['date_from']);
+        $d2   = new DateTime($data['date_to']);
+        $days = (int)$d1->diff($d2)->days + 1;
+      } else {
+        $days = rb_count_working_days($data['date_from'], $data['date_to']);
+      }
+      if ($days > 0) {
+        $total_hours = round((float)$data['hours_per_day'] * $days, 2);
+        $this->rb_planning_model->update_task_hours((int)$data['task_id'], $total_hours);
+      }
+    }
+
+    echo json_encode(['success' => (bool)$id, 'id' => $id]);
+  }
+
+  /**
+   * API: Get single project with start_date and deadline (for auto-fill)
+   * GET: project_id
+   */
+  public function api_get_project($project_id = '')
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('bowresourceplanning', '', 'view')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['error' => 'Access denied']);
+      return;
+    }
+
+    $id = $project_id ?: $this->input->get('project_id');
+
+    if (!$id || !is_numeric($id)) {
+      $this->output->set_status_header(400);
+      echo json_encode(['error' => 'Invalid project_id']);
+      return;
+    }
+
+    $this->load->model('bowresourceplanning/rb_planning_model');
+    $project = $this->rb_planning_model->get_project_dates((int)$id);
+
+    if (!$project) {
+      $this->output->set_status_header(404);
+      echo json_encode(['error' => 'Project not found']);
+      return;
+    }
+
+    echo json_encode(['project' => $project]);
+  }
+
+  /**
+   * API: Get tasks for a project (optionally filtered by staff)
+   * GET: project_id [, staff_id]
+   */
+  public function api_get_tasks()
+  {
+    header('Content-Type: application/json');
+
+    if (!has_permission('bowresourceplanning', '', 'view')) {
+      $this->output->set_status_header(403);
+      echo json_encode(['error' => 'Access denied']);
+      return;
+    }
+
+    $project_id = (int)$this->input->get('project_id');
+    $staff_id   = (int)$this->input->get('staff_id') ?: null;
+
+    if (!$project_id) {
+      $this->output->set_status_header(400);
+      echo json_encode(['error' => 'project_id required']);
+      return;
+    }
+
+    $this->load->model('bowresourceplanning/rb_planning_model');
+    $tasks = $this->rb_planning_model->get_tasks_for_project($project_id, $staff_id);
+    echo json_encode(['tasks' => $tasks]);
   }
 }

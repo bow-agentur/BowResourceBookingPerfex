@@ -26,22 +26,30 @@ class Rb_planning_model extends App_Model
         $this->table_work_patterns = db_prefix() . 'rb_work_patterns';
         $this->table_time_off      = db_prefix() . 'rb_time_off';
         
-        // Auto-migration: Add include_weekends column if missing
-        $this->ensure_include_weekends_column();
+        // Auto-migrations
+        $this->_auto_migrate();
     }
     
     /**
-     * Ensure include_weekends column exists (auto-migration)
+     * Run auto-migrations for schema upgrades
      */
-    private function ensure_include_weekends_column()
+    private function _auto_migrate()
     {
-        static $checked = false;
-        if ($checked) return;
-        $checked = true;
+        static $done = false;
+        if ($done) return;
+        $done = true;
         
+        // include_weekends on rb_allocations
         if ($this->db->table_exists($this->table_allocations)) {
             if (!$this->db->field_exists('include_weekends', $this->table_allocations)) {
                 $this->db->query('ALTER TABLE `' . $this->table_allocations . '` ADD `include_weekends` TINYINT(1) NOT NULL DEFAULT 0 AFTER `allocation_type`');
+            }
+        }
+        
+        // estimated_hours on tbltasks (Planning Board v2.0)
+        if ($this->db->table_exists(db_prefix() . 'tasks')) {
+            if (!$this->db->field_exists('estimated_hours', db_prefix() . 'tasks')) {
+                $this->db->query('ALTER TABLE `' . db_prefix() . 'tasks` ADD COLUMN `estimated_hours` DECIMAL(6,2) NULL DEFAULT NULL AFTER `duedate`');
             }
         }
     }
@@ -449,7 +457,8 @@ class Rb_planning_model extends App_Model
         );
 
         // Time Off für alle Staff laden (indexed by staff_id + date)
-        $time_off_data = $this->get_time_off_indexed($staff_ids, $date_from, $date_to);
+        // Use HR module if available, else rb_time_off
+        $time_off_data = $this->get_time_off_indexed_v2($staff_ids, $date_from, $date_to);
 
         // Allocations für alle Staff laden (indexed by staff_id + date)
         $allocations_data = $this->get_allocations_indexed($staff_ids, $date_from, $date_to);
@@ -528,8 +537,62 @@ class Rb_planning_model extends App_Model
             'date_to'   => $date_to
         ]);
 
-        $indexed = [];
+        return $this->_index_time_off_entries($time_off, $date_from, $date_to);
+    }
 
+    /**
+     * Get time off indexed — uses HR module when available (v2.0)
+     */
+    private function get_time_off_indexed_v2($staff_ids, $date_from, $date_to)
+    {
+        $hr_table = db_prefix() . 'hr_absences';
+        if ($this->db->table_exists($hr_table)) {
+            // HR module available
+            $rows = $this->db->select('a.staff_id, a.date_from, a.date_to, a.is_half_day')
+                ->from($hr_table . ' a')
+                ->where('a.status', 'approved')
+                ->where('a.date_from <=', $date_to)
+                ->where('a.date_to >=', $date_from)
+                ->where_in('a.staff_id', $staff_ids)
+                ->get()->result_array();
+
+            // Map to common format
+            $entries = [];
+            foreach ($rows as $r) {
+                $entries[] = [
+                    'staff_id'     => $r['staff_id'],
+                    'date_from'    => $r['date_from'],
+                    'date_to'      => $r['date_to'],
+                    'hours_per_day'=> !empty($r['is_half_day']) ? 4.0 : null,
+                ];
+            }
+
+            // Include holidays as full-day off for every staff member
+            $holidays = $this->get_hr_holidays($date_from, $date_to);
+            foreach ($holidays as $h) {
+                foreach ($staff_ids as $sid) {
+                    $entries[] = [
+                        'staff_id'     => $sid,
+                        'date_from'    => $h['date'],
+                        'date_to'      => $h['date'],
+                        'hours_per_day'=> !empty($h['is_half_day']) ? 4.0 : null,
+                    ];
+                }
+            }
+
+            return $this->_index_time_off_entries($entries, $date_from, $date_to);
+        }
+
+        // Fallback
+        return $this->get_time_off_indexed($staff_ids, $date_from, $date_to);
+    }
+
+    /**
+     * Helper: index time off entries by staff_id and date
+     */
+    private function _index_time_off_entries($time_off, $date_from, $date_to)
+    {
+        $indexed = [];
         foreach ($time_off as $entry) {
             $staff_id = $entry['staff_id'];
             $start    = new DateTime($entry['date_from']);
@@ -543,45 +606,70 @@ class Rb_planning_model extends App_Model
                 }
             }
         }
-
         return $indexed;
     }
 
     /**
      * Get allocations indexed by staff_id and date (summed hours per day)
+     * v2.0: reads live from project_members + task_assigned, not just rb_allocations
+     *
+     * Projects are PRESENCE-ONLY indicators and do NOT contribute to capacity.
+     * Only task assignments consume capacity.
      */
     private function get_allocations_indexed($staff_ids, $date_from, $date_to)
     {
-        $allocations = $this->get_allocations([
-            'staff_ids' => $staff_ids,
-            'date_from' => $date_from,
-            'date_to'   => $date_to
-        ]);
+        // Task assignments only — real capacity consumers
+        $has_estimated = $this->db->field_exists('estimated_hours', db_prefix() . 'tasks');
+        $task_select   = 'ta.staffid AS staff_id, t.startdate AS date_from, t.duedate AS date_to, '
+                       . 'a.hours_per_day AS override_hpd, COALESCE(a.include_weekends, 0) AS include_weekends'
+                       . ($has_estimated ? ', t.estimated_hours' : ', NULL AS estimated_hours');
+
+        $this->db->select($task_select)
+            ->from(db_prefix() . 'task_assigned ta')
+            ->join(db_prefix() . 'tasks t', 't.id = ta.taskid')
+            ->join($this->table_allocations . ' a', 'a.staff_id = ta.staffid AND a.task_id = ta.taskid', 'left')
+            ->where_in('ta.staffid', $staff_ids)
+            ->where('t.rel_type', 'project')
+            ->where('t.status !=', 5);
+        $task_allocs = $this->db->get()->result_array();
 
         $indexed = [];
 
-        foreach ($allocations as $alloc) {
+        foreach ($task_allocs as $alloc) {
+            if (empty($alloc['date_from']) || empty($alloc['date_to'])) continue;
+
             $staff_id = $alloc['staff_id'];
-            $start    = new DateTime($alloc['date_from']);
-            $end      = (new DateTime($alloc['date_to']))->modify('+1 day');
-            $period   = new DatePeriod($start, new DateInterval('P1D'), $end);
-            
-            // Check if include_weekends field exists (backward compatibility)
-            $include_weekends = isset($alloc['include_weekends']) ? !empty($alloc['include_weekends']) : false;
+
+            // Determine hours per day for capacity:
+            // 1. Explicit override hours_per_day
+            // 2. estimated_hours / working_days
+            // 3. Default 8h
+            if (!empty($alloc['override_hpd'])) {
+                $hpd = (float)$alloc['override_hpd'];
+            } elseif (!empty($alloc['estimated_hours'])) {
+                $wd  = rb_count_working_days($alloc['date_from'], $alloc['date_to']);
+                $hpd = $wd > 0 ? round((float)$alloc['estimated_hours'] / $wd, 2) : 8.0;
+            } else {
+                $hpd = 8.0;
+            }
+
+            $start  = new DateTime($alloc['date_from']);
+            $end    = (new DateTime($alloc['date_to']))->modify('+1 day');
+            $period = new DatePeriod($start, new DateInterval('P1D'), $end);
+
+            $include_weekends = !empty($alloc['include_weekends']);
 
             foreach ($period as $date) {
                 $day_str = $date->format('Y-m-d');
                 if ($day_str >= $date_from && $day_str <= $date_to) {
-                    // Skip weekends unless include_weekends is enabled
                     $dow = $date->format('w'); // 0 = Sunday, 6 = Saturday
                     if (!$include_weekends && ($dow == 0 || $dow == 6)) {
                         continue;
                     }
-                    
                     if (!isset($indexed[$staff_id][$day_str])) {
                         $indexed[$staff_id][$day_str] = 0;
                     }
-                    $indexed[$staff_id][$day_str] += (float) $alloc['hours_per_day'];
+                    $indexed[$staff_id][$day_str] += $hpd;
                 }
             }
         }
@@ -692,56 +780,467 @@ class Rb_planning_model extends App_Model
     }
 
     // ========================================================================
-    // BOARD DATA (für Timeline-Ansicht)
+    // BOARD DATA (für Timeline-Ansicht) — v2.0: Live View über Perfex-Daten
     // ========================================================================
 
     /**
-     * Get all data needed for the planning board
+     * Get all data needed for the planning board — Live JOIN from Perfex tables.
+     *
+     * rb_allocations stores ONLY planning overrides (h/d, color, note).
+     * Project/task memberships are read live from project_members / task_assigned.
      */
     public function get_board_data($date_from, $date_to, $filters = [])
     {
-        // Staff mit Kapazität
-        $staff = $this->get_staff_with_capacity($date_from, $date_to, $filters);
-        $staff_ids = array_column($staff, 'staffid');
+        $this->load->helper('bowresourceplanning/rb_capacity');
 
-        // Allocations
+        // 1. Active staff
+        $this->db->select('s.staffid, s.firstname, s.lastname, s.email, s.profile_image');
+        $this->db->from(db_prefix() . 'staff s');
+        $this->db->where('s.active', 1);
+        if (!empty($filters['staff_id'])) {
+            $this->db->where('s.staffid', $filters['staff_id']);
+        }
+        $this->db->order_by('s.firstname', 'ASC');
+        $staff_list = $this->db->get()->result_array();
+
+        if (empty($staff_list)) {
+            return ['staff' => [], 'allocations' => [], 'time_off' => [], 'capacity' => [], 'projects' => [], 'date_from' => $date_from, 'date_to' => $date_to];
+        }
+
+        $staff_ids = array_column($staff_list, 'staffid');
+
+        // 2. Project memberships + planning overrides
+        $this->db->select('
+            pm.staff_id,
+            p.id          AS project_id,
+            p.name        AS project_name,
+            p.start_date  AS project_start,
+            p.deadline    AS project_deadline,
+            a.id          AS allocation_id,
+            a.hours_per_day,
+            a.color       AS override_color,
+            a.note,
+            a.date_from   AS override_from,
+            a.date_to     AS override_to,
+            a.include_weekends
+        ');
+        $this->db->from(db_prefix() . 'project_members pm');
+        $this->db->join(db_prefix() . 'projects p', 'p.id = pm.project_id');
+        $this->db->join(
+            $this->table_allocations . ' a',
+            'a.staff_id = pm.staff_id AND a.project_id = pm.project_id AND (a.task_id IS NULL OR a.task_id = 0)',
+            'left'
+        );
+        $this->db->where_in('pm.staff_id', $staff_ids);
+        $this->db->where('p.status !=', 4); // Not completed/cancelled
+        if (!empty($filters['project_id'])) {
+            $this->db->where('pm.project_id', $filters['project_id']);
+        }
+        $project_rows = $this->db->get()->result_array();
+
+        // 3. Task assignments + planning overrides
+        $has_estimated_hours = $this->db->field_exists('estimated_hours', db_prefix() . 'tasks');
+        $task_select = 'ta.staffid AS staff_id, t.id AS task_id, t.name AS task_name, t.rel_id AS project_id, p.name AS project_name, t.startdate AS task_start, t.duedate AS task_due, t.status AS task_status, ' . ($has_estimated_hours ? 't.estimated_hours, ' : 'NULL AS estimated_hours, ') . 'a.id AS allocation_id, a.hours_per_day, a.color AS override_color, a.note, a.date_from AS override_from, a.date_to AS override_to, a.include_weekends';
+        $this->db->select($task_select);
+        $this->db->from(db_prefix() . 'task_assigned ta');
+        $this->db->join(db_prefix() . 'tasks t', 't.id = ta.taskid');
+        $this->db->join(db_prefix() . 'projects p', 'p.id = t.rel_id', 'left');
+        $this->db->join(
+            $this->table_allocations . ' a',
+            'a.staff_id = ta.staffid AND a.task_id = ta.taskid',
+            'left'
+        );
+        $this->db->where_in('ta.staffid', $staff_ids);
+        $this->db->where('t.rel_type', 'project');
+        $this->db->where('t.status !=', 5); // Not completed
+        $task_rows = $this->db->get()->result_array();
+
+        // 4. Build unified allocations array
         $allocations = [];
-        if (!empty($staff_ids)) {
-            $allocations = $this->get_allocations([
-                'staff_ids' => $staff_ids,
-                'date_from' => $date_from,
-                'date_to'   => $date_to
-            ]);
+
+        foreach ($project_rows as $row) {
+            $df = !empty($row['override_from']) ? $row['override_from'] : $row['project_start'];
+            $dt = !empty($row['override_to'])   ? $row['override_to']   : $row['project_deadline'];
+            if (empty($df) || empty($dt)) continue;
+
+            $color = !empty($row['override_color']) ? $row['override_color']
+                   : rb_project_color((int)$row['project_id']);
+
+            $allocations[] = [
+                'id'              => !empty($row['allocation_id']) ? (int)$row['allocation_id'] : 'p_' . $row['staff_id'] . '_' . $row['project_id'],
+                'staff_id'        => (int)$row['staff_id'],
+                'project_id'      => (int)$row['project_id'],
+                'task_id'         => null,
+                'project_name'    => $row['project_name'],
+                'project_color'   => $color,
+                'date_from'       => $df,
+                'date_to'         => $dt,
+                'start_date'      => $df,
+                'end_date'        => $dt,
+                'hours_per_day'   => (!empty($row['allocation_id']) && $row['hours_per_day'] !== null) ? (float)$row['hours_per_day'] : 0.0,
+                'note'            => $row['note'],
+                'include_weekends'=> !empty($row['include_weekends']) ? 1 : 0,
+                'type'            => 'project',
+                'is_override'     => !empty($row['allocation_id']),
+            ];
         }
 
-        // Time Off
-        $time_off = [];
-        if (!empty($staff_ids)) {
-            $time_off = $this->get_time_off([
-                'staff_ids' => $staff_ids,
-                'date_from' => $date_from,
-                'date_to'   => $date_to
-            ]);
+        foreach ($task_rows as $row) {
+            $df = !empty($row['override_from']) ? $row['override_from'] : $row['task_start'];
+            $dt = !empty($row['override_to'])   ? $row['override_to']   : $row['task_due'];
+            if (empty($df) || empty($dt)) continue;
+
+            $working_days = rb_count_working_days($df, $dt);
+            $est_hours    = !empty($row['estimated_hours']) ? (float)$row['estimated_hours'] : null;
+
+            // Fallback: if no estimated_hours on the task, derive from span × default daily hours
+            $default_hpd = 8.0;
+            if ($est_hours === null && $working_days > 0) {
+                $est_hours = round($working_days * $default_hpd, 1);
+            }
+
+            $daily_avg    = null;
+            if ($est_hours && $working_days > 0) {
+                $daily_avg = round($est_hours / $working_days, 1);
+            }
+            $hpd = !empty($row['hours_per_day']) ? (float)$row['hours_per_day']
+                 : ($daily_avg ?: 0.0);
+
+            $allocations[] = [
+                'id'              => !empty($row['allocation_id']) ? (int)$row['allocation_id'] : 't_' . $row['staff_id'] . '_' . $row['task_id'],
+                'staff_id'        => (int)$row['staff_id'],
+                'project_id'      => (int)$row['project_id'],
+                'task_id'         => (int)$row['task_id'],
+                'task_name'       => $row['task_name'],
+                'task_status'     => (int)$row['task_status'],
+                'project_name'    => $row['project_name'] ?? null,
+                'estimated_hours' => $est_hours,
+                'daily_avg'       => $daily_avg,
+                'date_from'       => $df,
+                'date_to'         => $dt,
+                'start_date'      => $df,
+                'end_date'        => $dt,
+                'hours_per_day'   => $hpd,
+                'project_color'   => !empty($row['override_color']) ? $row['override_color'] : rb_project_color((int)$row['project_id']),
+                'note'            => $row['note'],
+                'include_weekends'=> !empty($row['include_weekends']) ? 1 : 0,
+                'type'            => 'task',
+                'is_override'     => !empty($row['allocation_id']),
+            ];
         }
 
-        // Kapazität pro Tag
-        $capacity = [];
-        if (!empty($staff_ids)) {
-            $capacity = $this->get_capacity($staff_ids, $date_from, $date_to);
-        }
+        // 5. Time Off (HR module or fallback)
+        $time_off = $this->get_hr_time_off_for_board($date_from, $date_to, $staff_ids);
 
-        // Projekte (für Dropdown/Legende)
+        // 6. Capacity per staff per day
+        $capacity = $this->get_capacity($staff_ids, $date_from, $date_to);
+
+        // 7. Projects for dropdown
         $projects = $this->get_active_projects();
 
         return [
-            'staff'       => $staff,
+            'staff'       => $staff_list,
             'allocations' => $allocations,
             'time_off'    => $time_off,
             'capacity'    => $capacity,
             'projects'    => $projects,
             'date_from'   => $date_from,
-            'date_to'     => $date_to
+            'date_to'     => $date_to,
         ];
+    }
+
+    /**
+     * Get HR time off entries for board (with fallback to rb_time_off)
+     */
+    private function get_hr_time_off_for_board($date_from, $date_to, $staff_ids)
+    {
+        $hr_absences_table = db_prefix() . 'hr_absences';
+
+        if ($this->db->table_exists($hr_absences_table)) {
+            // Read from bowhumanressources HR module
+            $rows = $this->db->select('a.staff_id, a.date_from, a.date_to, a.date_from AS start_date, a.date_to AS end_date, "hr" AS source, s.firstname, s.lastname')
+                ->from($hr_absences_table . ' a')
+                ->join(db_prefix() . 'staff s', 's.staffid = a.staff_id', 'left')
+                ->where('a.status', 'approved')
+                ->where('a.date_from <=', $date_to)
+                ->where('a.date_to >=', $date_from)
+                ->where_in('a.staff_id', $staff_ids)
+                ->order_by('a.date_from', 'ASC')
+                ->get()->result_array();
+
+            // Also include holidays
+            $holidays = $this->get_hr_holidays($date_from, $date_to);
+            foreach ($holidays as $h) {
+                foreach ($staff_ids as $sid) {
+                    $rows[] = [
+                        'staff_id'   => $sid,
+                        'date_from'  => $h['date'],
+                        'date_to'    => $h['date'],
+                        'start_date' => $h['date'],
+                        'end_date'   => $h['date'],
+                        'type'       => 'holiday',
+                        'source'     => 'hr_holiday',
+                    ];
+                }
+            }
+            return $rows;
+        }
+
+        // Fallback: rb_time_off
+        return $this->get_time_off([
+            'staff_ids' => $staff_ids,
+            'date_from' => $date_from,
+            'date_to'   => $date_to,
+        ]);
+    }
+
+    /**
+     * Get public holidays from HR module
+     */
+    private function get_hr_holidays($date_from, $date_to)
+    {
+        $table = db_prefix() . 'hr_holidays';
+        if (!$this->db->table_exists($table)) {
+            return [];
+        }
+        return $this->db->select('id, name, date, is_half_day')
+            ->where('date >=', $date_from)
+            ->where('date <=', $date_to)
+            ->get($table)->result_array();
+    }
+
+    // ========================================================================
+    // WRITE METHODS — Board writes directly to Perfex tables
+    // ========================================================================
+
+    /**
+     * Assign staff member to a project (writes to project_members)
+     */
+    public function assign_staff_to_project($staff_id, $project_id)
+    {
+        // Check if already a member
+        $exists = $this->db->where('staff_id', $staff_id)
+            ->where('project_id', $project_id)
+            ->count_all_results(db_prefix() . 'project_members');
+
+        if (!$exists) {
+            $this->db->insert(db_prefix() . 'project_members', [
+                'staff_id'   => $staff_id,
+                'project_id' => $project_id,
+            ]);
+        }
+        return true;
+    }
+
+    /**
+     * Assign staff member to a task (writes to task_assigned)
+     */
+    public function assign_staff_to_task($staff_id, $task_id)
+    {
+        $exists = $this->db->where('staffid', $staff_id)
+            ->where('taskid', $task_id)
+            ->count_all_results(db_prefix() . 'task_assigned');
+
+        if (!$exists) {
+            $this->db->insert(db_prefix() . 'task_assigned', [
+                'staffid' => $staff_id,
+                'taskid'  => $task_id,
+            ]);
+        }
+        return true;
+    }
+
+    /**
+     * Remove staff member from a project
+     */
+    public function remove_staff_from_project($staff_id, $project_id)
+    {
+        $this->db->where('staff_id', $staff_id)
+            ->where('project_id', $project_id)
+            ->delete(db_prefix() . 'project_members');
+
+        // Remove planning override too
+        $this->db->where('staff_id', $staff_id)
+            ->where('project_id', $project_id)
+            ->where('task_id IS NULL', null, false)
+            ->delete($this->table_allocations);
+
+        return true;
+    }
+
+    /**
+     * Remove staff member from a task
+     */
+    public function remove_staff_from_task($staff_id, $task_id)
+    {
+        $this->db->where('staffid', $staff_id)
+            ->where('taskid', $task_id)
+            ->delete(db_prefix() . 'task_assigned');
+
+        // Remove planning override too
+        $this->db->where('staff_id', $staff_id)
+            ->where('task_id', $task_id)
+            ->delete($this->table_allocations);
+
+        return true;
+    }
+
+    /**
+     * UPSERT a planning override in rb_allocations
+     * Stores: hours_per_day, color, note for (staff_id, project_id, task_id)
+     */
+    public function upsert_override($data)
+    {
+        $staff_id   = (int)($data['staff_id'] ?? 0);
+        $project_id = !empty($data['project_id']) ? (int)$data['project_id'] : null;
+        $task_id    = !empty($data['task_id'])    ? (int)$data['task_id']    : null;
+
+        if (!$staff_id) return false;
+
+        // Find existing override
+        $this->db->where('staff_id', $staff_id);
+        if ($project_id) {
+            $this->db->where('project_id', $project_id);
+        } else {
+            $this->db->where('project_id IS NULL', null, false);
+        }
+        if ($task_id) {
+            $this->db->where('task_id', $task_id);
+        } else {
+            $this->db->where('task_id IS NULL', null, false);
+        }
+
+        $existing = $this->db->get($this->table_allocations)->row();
+
+        $payload = [
+            'staff_id'        => $staff_id,
+            'project_id'      => $project_id,
+            'task_id'         => $task_id,
+            'hours_per_day'   => isset($data['hours_per_day']) ? (float)$data['hours_per_day'] : 8.0,
+            'color'           => $data['color'] ?? null,
+            'note'            => $data['note'] ?? null,
+            'date_from'       => $data['date_from'] ?? date('Y-m-d'),
+            'date_to'         => $data['date_to'] ?? date('Y-m-d'),
+            'allocation_type' => 'hours',
+            'include_weekends'=> !empty($data['include_weekends']) ? 1 : 0,
+        ];
+
+        if ($existing) {
+            $this->db->where('id', $existing->id)->update($this->table_allocations, $payload);
+            $this->_check_overload_notify($staff_id, $payload['date_from'], $payload['date_to'], $project_id);
+            return (int)$existing->id;
+        }
+
+        $payload['created_by'] = get_staff_user_id();
+        $this->db->insert($this->table_allocations, $payload);
+        $id = $this->db->insert_id();
+        if ($id) {
+            $this->_check_overload_notify($staff_id, $payload['date_from'], $payload['date_to'], $project_id);
+        }
+        return $id;
+    }
+
+    /**
+     * Update estimated_hours on a task
+     */
+    public function update_task_hours($task_id, $estimated_hours)
+    {
+        if (!$this->db->field_exists('estimated_hours', db_prefix() . 'tasks')) {
+            return false;
+        }
+        $this->db->where('id', $task_id)
+            ->update(db_prefix() . 'tasks', ['estimated_hours' => (float)$estimated_hours]);
+        return $this->db->affected_rows() > 0;
+    }
+
+    /**
+     * Get project with start_date and deadline for auto-fill in dialog
+     */
+    public function get_project_dates($project_id)
+    {
+        return $this->db->select('id, name, start_date, deadline')
+            ->where('id', $project_id)
+            ->get(db_prefix() . 'projects')->row_array();
+    }
+
+    /**
+     * Get tasks for a project optionally filtered by assigned staff
+     */
+    public function get_tasks_for_project($project_id, $staff_id = null)
+    {
+        $has_est = $this->db->field_exists('estimated_hours', db_prefix() . 'tasks');
+        $sel = 't.id, t.name, t.startdate, t.duedate, t.status' . ($has_est ? ', t.estimated_hours' : '');
+
+        $this->db->select($sel);
+        $this->db->from(db_prefix() . 'tasks t');
+        $this->db->where('t.rel_type', 'project');
+        $this->db->where('t.rel_id', $project_id);
+        $this->db->where('t.status !=', 5); // Not completed
+
+        if ($staff_id) {
+            $this->db->join(db_prefix() . 'task_assigned ta', 'ta.taskid = t.id AND ta.staffid = ' . (int)$staff_id);
+        }
+
+        $this->db->order_by('t.name', 'ASC');
+        return $this->db->get()->result_array();
+    }
+
+    /**
+     * Fire Perfex notification when a staff member is overloaded
+     */
+    private function _check_overload_notify($staff_id, $date_from, $date_to, $project_id = null)
+    {
+        try {
+            $capacity = $this->get_capacity([$staff_id], $date_from, $date_to);
+            if (empty($capacity[$staff_id])) return;
+
+            $overloaded_days = [];
+            foreach ($capacity[$staff_id] as $date => $day) {
+                if ($day['status'] === 'overbooked') {
+                    $overloaded_days[] = $date;
+                }
+            }
+
+            if (empty($overloaded_days)) return;
+
+            $staff_row = $this->db->select('firstname, lastname')->where('staffid', $staff_id)->get(db_prefix() . 'staff')->row();
+            $name = $staff_row ? $staff_row->firstname . ' ' . $staff_row->lastname : '#' . $staff_id;
+            $project_name = '';
+            if ($project_id) {
+                $p = $this->db->select('name')->where('id', $project_id)->get(db_prefix() . 'projects')->row();
+                if ($p) $project_name = ' (' . $p->name . ')';
+            }
+
+            $msg = $name . ' ist am ' . implode(', ', array_slice($overloaded_days, 0, 3))
+                 . (count($overloaded_days) > 3 ? ' (+' . (count($overloaded_days) - 3) . ')' : '')
+                 . ' überlastet' . $project_name;
+
+            // Notify affected staff member
+            add_notification([
+                'description'     => $msg,
+                'touserid'        => $staff_id,
+                'fromcompany'     => 1,
+                'fromuserid'      => get_staff_user_id(),
+                'link' => 'bowresourceplanning/planning_board',
+                'additional_data' => json_encode(['type' => 'overload']),
+            ]);
+
+            // Notify all admins
+            $admins = $this->db->where('admin', 1)->get(db_prefix() . 'staff')->result_array();
+            foreach ($admins as $admin) {
+                if ((int)$admin['staffid'] === (int)$staff_id) continue; // Skip if admin IS the staff
+                add_notification([
+                    'description'     => $msg,
+                    'touserid'        => $admin['staffid'],
+                    'fromcompany'     => 1,
+                    'fromuserid'      => get_staff_user_id(),
+                    'link' => 'bowresourceplanning/planning_board',
+                    'additional_data' => json_encode(['type' => 'overload']),
+                ]);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'RB overload notify error: ' . $e->getMessage());
+        }
     }
 
     // ========================================================================
@@ -846,5 +1345,134 @@ class Rb_planning_model extends App_Model
         $this->db->group_by('t.type');
         
         return $this->db->get()->result_array();
+    }
+
+    /**
+     * Add a staff member as a project follower (project_activity watcher).
+     * Uses Perfex's tblproject_activity to register the follower if not already present.
+     *
+     * @param int $staff_id
+     * @param int $project_id
+     * @return bool
+     */
+    public function add_project_follower($staff_id, $project_id)
+    {
+        $staff_id   = (int)$staff_id;
+        $project_id = (int)$project_id;
+        if (!$staff_id || !$project_id) return false;
+
+        // Check if already a follower
+        $exists = $this->db->get_where(
+            db_prefix() . 'project_members',
+            ['project_id' => $project_id, 'staff_id' => $staff_id]
+        )->row();
+
+        if ($exists) return true; // already a member, skip
+
+        // Use Perfex's projects model if loaded; otherwise insert directly
+        if (function_exists('add_project_member')) {
+            return add_project_member($project_id, $staff_id);
+        }
+
+        $this->db->insert(db_prefix() . 'project_members', [
+            'project_id' => $project_id,
+            'staff_id'   => $staff_id
+        ]);
+
+        return $this->db->affected_rows() > 0;
+    }
+
+    /**
+     * Get tasks with assignment details for reporting.
+     * Returns one row per (task, staff) pair that overlaps [date_from, date_to].
+     *
+     * @param string $date_from
+     * @param string $date_to
+     * @param int|null $staff_id   filter by staff
+     * @param int|null $project_id filter by project
+     * @return array
+     */
+    public function get_tasks_for_report($date_from, $date_to, $staff_id = null, $project_id = null)
+    {
+        // Base: tasks assigned to staff within the date window
+        $this->db->select(
+            't.id                  AS task_id,
+             t.name                AS task_name,
+             t.status              AS task_status,
+             t.startdate           AS task_start,
+             t.duedate             AS task_due,
+             t.estimated_hours,
+             p.id                  AS project_id,
+             p.name                AS project_name,
+             s.staffid,
+             s.firstname,
+             s.lastname,
+             a.id                  AS override_id,
+             a.hours_per_day       AS override_hpd,
+             a.date_from           AS override_from,
+             a.date_to             AS override_to'
+        );
+        $this->db->from(db_prefix() . 'task_assigned ta');
+        $this->db->join(db_prefix() . 'tasks t',   't.id = ta.taskid', 'inner');
+        $this->db->join(db_prefix() . 'projects p', 'p.id = t.rel_id AND t.rel_type = \'project\'', 'left');
+        $this->db->join(db_prefix() . 'staff s',   's.staffid = ta.staffid', 'inner');
+        // Optional override record
+        $this->db->join(
+            db_prefix() . 'rb_allocations a',
+            'a.task_id = t.id AND a.staff_id = ta.staffid',
+            'left'
+        );
+
+        // Date window: task must overlap [date_from, date_to]
+        $df = $this->db->escape_str($date_from);
+        $dt = $this->db->escape_str($date_to);
+        $this->db->where(
+            "(COALESCE(a.date_from, t.startdate) <= '{$dt}'
+              AND COALESCE(a.date_to, t.duedate) >= '{$df}')"
+        );
+
+        if ($staff_id)   $this->db->where('ta.staffid',  (int)$staff_id);
+        if ($project_id) $this->db->where('p.id',        (int)$project_id);
+
+        $this->db->order_by('p.name, t.duedate, t.name');
+        $rows = $this->db->get()->result_array();
+
+        $result = [];
+        foreach ($rows as $row) {
+            $start = $row['override_from'] ?: $row['task_start'];
+            $end   = $row['override_to']   ?: $row['task_due'];
+            if (!$start || !$end) continue;
+
+            // Clip to report window
+            $eff_start = max($start, $date_from);
+            $eff_end   = min($end,   $date_to);
+            $working_days = rb_count_working_days($eff_start, $eff_end);
+
+            $est    = $row['estimated_hours'] !== null ? (float)$row['estimated_hours'] : null;
+            $hpd    = $row['override_hpd'] !== null
+                    ? (float)$row['override_hpd']
+                    : ($est && $working_days > 0 ? round($est / $working_days, 1) : 8.0);
+            $alloc_h = round($hpd * $working_days, 1);
+
+            $result[] = [
+                'task_id'        => (int)$row['task_id'],
+                'task_name'      => $row['task_name'],
+                'task_status'    => (int)$row['task_status'],
+                'task_start'     => $start,
+                'task_due'       => $end,
+                'project_id'     => $row['project_id'] ? (int)$row['project_id'] : null,
+                'project_name'   => $row['project_name'] ?: '—',
+                'project_color'  => $row['project_id'] ? rb_project_color((int)$row['project_id']) : '#95a5a6',
+                'staff_id'       => (int)$row['staffid'],
+                'staff_name'     => trim($row['firstname'] . ' ' . $row['lastname']),
+                'estimated_hours'=> $est,
+                'hours_per_day'  => $hpd,
+                'allocated_hours'=> $alloc_h,
+                'working_days'   => $working_days,
+                'has_override'   => !empty($row['override_id']),
+            ];
+        }
+
+        return $result;
     }
 }

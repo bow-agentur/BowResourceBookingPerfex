@@ -80,6 +80,7 @@
 
 .rb-dates-scroll {
     display: flex;
+    flex-direction: column;  /* stack month-row above day-row */
     overflow-x: hidden;
     flex: 1;
 }
@@ -686,4 +687,566 @@
         print-color-adjust: exact;
         -webkit-print-color-adjust: exact;
     }
+}
+
+/* ============================================================================
+   PLANNING BOARD v2.0 — Lane-based staff groups
+   ============================================================================ */
+
+/* --------------------------------------------------------------------------
+   Staff group container
+   -------------------------------------------------------------------------- */
+.rb-staff-group {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 2px solid #e0e0e0;
+    position: relative;
+}
+
+/* --------------------------------------------------------------------------
+   Staff header row (sticky top inside scrollable board-body)
+   -------------------------------------------------------------------------- */
+.rb-staff-header {
+    display: flex;
+    align-items: stretch;
+    min-height: 46px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* Left 200 px panel: avatar, name, utilisation — stays visible when scrolling */
+.rb-staff-header-info {
+    min-width: 200px;
+    max-width: 200px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: #fff;
+    position: sticky;
+    left: 0;
+    z-index: 20;
+    border-right: 1px solid #dde0e4;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.04);
+}
+
+/* Right side of the header row: background day cells */
+.rb-header-cells {
+    flex: 1;
+    display: flex;
+    position: relative;
+    min-height: 46px;
+    background: #f8f9fa;
+}
+
+/* --------------------------------------------------------------------------
+   Collapsible lanes wrapper
+   -------------------------------------------------------------------------- */
+.rb-lanes-wrapper {
+    display: block;
+}
+.rb-collapsed .rb-lanes-wrapper {
+    display: none;
+}
+
+/* --------------------------------------------------------------------------
+   Lane row
+   -------------------------------------------------------------------------- */
+.rb-lane {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid #f4f4f4;
+    position: relative;
+}
+
+/* Left 200 px spacer per lane — keeps content aligned with header */
+.rb-lane-stub {
+    min-width: 200px;
+    max-width: 200px;
+    flex-shrink: 0;
+    background: #fff;
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    border-right: 1px solid #e8e8e8;
+}
+
+/* Cells + bars container inside each lane */
+.rb-lane-cells {
+    flex: 1;
+    display: flex;
+    position: relative;
+    min-height: 32px;
+}
+
+/* Lane type variants */
+.rb-project-lane  { min-height: 22px; }   /* ribbon-only lane */
+.rb-task-lane     { min-height: 28px; background: rgba(91,163,217,0.04); }
+.rb-timeoff-lane  { min-height: 26px; background: rgba(243,156,18,0.04); }
+.rb-empty-lane    { min-height: 32px; }
+
+/* --------------------------------------------------------------------------
+   Capacity lane: single lane per staff, height = 8 h scale
+   -------------------------------------------------------------------------- */
+.rb-capacity-lane {
+    min-height: 64px;
+}
+.rb-capacity-lane .rb-lane-cells {
+    height: 64px;
+    min-height: 64px;
+}
+.rb-capacity-stub {
+    display: flex;
+    align-items: flex-start;   /* label at top = full capacity mark */
+    justify-content: flex-end;
+    padding-top: 4px;
+    padding-right: 6px;
+}
+.rb-capacity-scale {
+    font-size: 9px;
+    color: #bbb;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+/* --------------------------------------------------------------------------
+   Staff info (name, utilisation, goal chips)
+   -------------------------------------------------------------------------- */
+.rb-staff-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.rb-staff-name {
+    font-weight: 600;
+    font-size: 12px;
+    color: #2c3e50;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rb-staff-util {
+    font-size: 10px;
+    margin-top: 1px;
+}
+.rb-util-over  { color: #e74c3c; font-weight: 700; }
+.rb-util-high  { color: #e67e22; }
+.rb-util-mid   { color: #27ae60; }
+.rb-util-low   { color: #95a5a6; }
+.rb-util-empty { color: #bdc3c7; }
+
+/* Employee "goals" chips shown in own row */
+.rb-staff-goals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    margin-top: 2px;
+}
+.rb-goal-chip {
+    display: inline-block;
+    background: #eaf3fb;
+    color: #2980b9;
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rb-goal-more {
+    display: inline-block;
+    background: #ecf0f1;
+    color: #7f8c8d;
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   Own-row highlight (employee viewing their own row)
+   -------------------------------------------------------------------------- */
+.rb-own-row > .rb-staff-header {
+    background: linear-gradient(to right, #e8f5e9 0%, #f8fffe 100%);
+}
+.rb-own-row > .rb-staff-header > .rb-staff-header-info {
+    background: #e8f5e9;
+    border-left: 3px solid #27ae60;
+}
+
+/* --------------------------------------------------------------------------
+   Collapse toggle button
+   -------------------------------------------------------------------------- */
+.rb-staff-toggle {
+    flex-shrink: 0;
+    cursor: pointer;
+    color: #bbb;
+    font-size: 10px;
+    padding: 0 3px;
+    transition: color 0.15s;
+    line-height: 1;
+}
+.rb-staff-toggle:hover { color: #3498db; }
+
+/* --------------------------------------------------------------------------
+   Month-row / day-row in the date header
+   -------------------------------------------------------------------------- */
+.rb-month-row {
+    display: flex;
+    border-bottom: 1px solid #dde0e4;
+    background: #f0f4f8;
+}
+.rb-month-cell {
+    font-size: 10px;
+    font-weight: 600;
+    color: #555;
+    padding: 2px 6px;
+    border-right: 1px solid #e8e8e8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: capitalize;
+}
+.rb-day-row {
+    display: flex;
+}
+
+/* --------------------------------------------------------------------------
+   Lane cell base + weekend/today/holiday column backgrounds
+   These rules make the column shading span EVERY lane in the staff row.
+   -------------------------------------------------------------------------- */
+.rb-lane-cell {
+    flex-shrink: 0;
+    border-right: 1px solid rgba(0,0,0,0.04);
+    box-sizing: border-box;
+}
+/* Weekends: subtle grey column */
+.rb-lane-cell.weekend {
+    background-color: rgba(0,0,0,0.04);
+}
+/* Public holidays: orange column (from HR module) */
+.rb-lane-cell.holiday {
+    background-color: rgba(243,156,18,0.13);
+}
+/* Today: light blue column */
+.rb-lane-cell.today {
+    background-color: rgba(52,152,219,0.10);
+}
+/* Also mark the date header cells in the staff rows */
+.rb-header-cells .rb-lane-cell.weekend {
+    background-color: rgba(0,0,0,0.04);
+}
+.rb-header-cells .rb-lane-cell.holiday {
+    background-color: rgba(243,156,18,0.13);
+}
+.rb-header-cells .rb-lane-cell.today {
+    background-color: rgba(52,152,219,0.10);
+    box-shadow: inset 0 -2px 0 #3498db;
+}
+
+/* Date header cells — same column shading */
+.rb-date-cell.weekend {
+    background-color: rgba(0,0,0,0.04);
+}
+.rb-date-cell.holiday {
+    background-color: rgba(243,156,18,0.18);
+    color: #b7620a;
+}
+.rb-date-cell.holiday .rb-day-name,
+.rb-date-cell.holiday .rb-day-num {
+    color: #b7620a;
+    font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   Lane cell capacity backgrounds
+   -------------------------------------------------------------------------- */
+.rb-lane-cell.rb-cell-over { background-color: rgba(231,76,60,0.12) !important; }
+.rb-lane-cell.rb-cell-full { background-color: rgba(230,126,34,0.08) !important; }
+.rb-lane-cell.rb-cell-warn { background-color: rgba(241,196,15,0.08) !important; }
+
+/* --------------------------------------------------------------------------
+   Allocation bars v2.0
+   -------------------------------------------------------------------------- */
+.rb-allocation {
+    position: absolute;
+    top: 4px;
+    height: 26px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.14);
+    z-index: 2;
+    transition: box-shadow 0.12s, opacity 0.12s;
+    user-select: none;
+}
+
+/* Project bars: thin presence ribbon — context only, not capacity */
+.rb-project-bar {
+    height: 8px;
+    top: 6px;
+    border-radius: 3px;
+    opacity: 0.60;
+    box-shadow: none;
+}
+.rb-project-bar:hover {
+    opacity: 0.85;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+}
+
+/* Project backgrounds: full-height translucent band behind tasks */
+.rb-project-bg {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    opacity: 0.12;
+    z-index: 0;
+    pointer-events: auto;
+    cursor: default;
+    border-radius: 0;
+    transition: opacity 0.15s;
+}
+.rb-project-bg:hover {
+    opacity: 0.22;
+}
+
+.rb-task-bar {
+    /* height and top are set inline (proportional to hours_per_day) */
+    font-size: 10px;
+    border-radius: 3px;
+    opacity: 0.92;
+    z-index: 2;
+    /* switch to column flex so name / project / hours stack vertically */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2px 6px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.rb-task-bar .rb-bar-label {
+    font-weight: 600;
+    font-size: 10px;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.rb-task-bar .rb-bar-project {
+    font-size: 9px;
+    opacity: 0.75;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.rb-task-bar .rb-bar-hours {
+    font-size: 9px;
+    font-weight: 500;
+    opacity: 0.90;
+    margin-left: 0;
+    line-height: 1.2;
+}
+
+.rb-allocation:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+    opacity: 1;
+    z-index: 3;
+}
+
+.rb-allocation-overbooked {
+    outline: 2px solid #e74c3c !important;
+    outline-offset: 1px;
+}
+
+/* Bar text elements */
+.rb-bar-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.rb-bar-hours {
+    flex-shrink: 0;
+    font-size: 10px;
+    opacity: 0.85;
+    margin-left: 4px;
+}
+
+/* Inline-editable hours span (double-click to edit) */
+.rb-inline-editable {
+    cursor: text;
+    border-bottom: 1px dotted rgba(255,255,255,0.55);
+    padding: 0 2px;
+    border-radius: 1px;
+}
+.rb-inline-editable:hover {
+    border-bottom-color: rgba(255,255,255,0.9);
+    background: rgba(255,255,255,0.15);
+}
+.rb-inline-input {
+    width: 52px;
+    padding: 0 2px;
+    font-size: 10px;
+    line-height: 1.2;
+    border: 1px solid #aaa;
+    border-radius: 2px;
+    background: #fff;
+    color: #333;
+}
+
+/* --------------------------------------------------------------------------
+   Time-off bars (hatched patterns)
+   -------------------------------------------------------------------------- */
+.rb-time-off {
+    height: 18px;
+    top: 4px;
+    opacity: 0.80;
+    cursor: default;
+    font-size: 10px;
+    border-radius: 3px;
+}
+.rb-timeoff-vacation {
+    background: repeating-linear-gradient(
+        45deg, #3498db, #3498db 4px, #5dade2 4px, #5dade2 8px);
+    color: #fff;
+}
+.rb-timeoff-sick {
+    background: repeating-linear-gradient(
+        45deg, #e74c3c, #e74c3c 4px, #ec7063 4px, #ec7063 8px);
+    color: #fff;
+}
+.rb-timeoff-holiday {
+    background: repeating-linear-gradient(
+        45deg, #f39c12, #f39c12 4px, #f8c471 4px, #f8c471 8px);
+    color: #fff;
+}
+.rb-timeoff-other {
+    background: repeating-linear-gradient(
+        45deg, #95a5a6, #95a5a6 4px, #b2bec3 4px, #b2bec3 8px);
+    color: #fff;
+}
+
+/* --------------------------------------------------------------------------
+   Board-level overbooking banner (outside modal, at top of board)
+   -------------------------------------------------------------------------- */
+#rb-board-overbooking-warning {
+    display: none;
+    background: #fef9e7;
+    border: 1px solid #f39c12;
+    border-left: 4px solid #e67e22;
+    border-radius: 4px;
+    padding: 8px 14px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: #7d6608;
+}
+#rb-board-overbooking-warning .rb-board-overbooking-close {
+    float: right;
+    cursor: pointer;
+    color: #aaa;
+    margin-left: 10px;
+    font-size: 15px;
+    line-height: 1;
+}
+#rb-board-overbooking-warning .rb-board-overbooking-close:hover { color: #555; }
+
+/* --------------------------------------------------------------------------
+   Calendar-week row in the date header
+   -------------------------------------------------------------------------- */
+.rb-kw-row {
+    display: flex;
+    background: #e8edf3;
+    border-bottom: 1px solid #d8dde4;
+}
+.rb-kw-cell {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: #789;
+    text-transform: uppercase;
+    padding: 2px 4px;
+    border-right: 1px solid #d8dde4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   Weekly utilization chips inside the staff left panel
+   -------------------------------------------------------------------------- */
+.rb-weekly-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    margin-top: 3px;
+}
+.rb-kw-chip {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+    cursor: default;
+    opacity: 0.88;
+}
+/* Reuse utilisation colour classes */
+.rb-kw-chip.rb-util-empty   { background: #ecf0f1; color: #7f8c8d; }
+.rb-kw-chip.rb-util-low     { background: #d5f5e3; color: #1d7838; }
+.rb-kw-chip.rb-util-mid     { background: #fef9e7; color: #9a6e00; }
+.rb-kw-chip.rb-util-high    { background: #fdebd0; color: #af4d0a; }
+.rb-kw-chip.rb-util-over    { background: #fadbd8; color: #922b21; }
+
+/* --------------------------------------------------------------------------
+   Daily capacity hover tooltip
+   -------------------------------------------------------------------------- */
+.rb-cell-tooltip {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    background: #fff;
+    border: 1px solid #cdd4db;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 7px 11px;
+    font-size: 11px;
+    line-height: 1.6;
+    min-width: 140px;
+}
+.rb-tip-date {
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 3px;
+}
+.rb-tip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: #555;
+}
+.rb-tip-row span { color: #888; }
+.rb-tip-row.rb-tip-over strong { color: #e74c3c; }
+.rb-tip-warn {
+    margin-top: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #e74c3c;
 }

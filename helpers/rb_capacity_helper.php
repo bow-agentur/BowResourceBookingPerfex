@@ -204,20 +204,7 @@ if (!function_exists('rb_project_color')) {
             return '#808080'; // Gray for no project
         }
         
-        $CI = &get_instance();
-        
-        // Try to get project color from database
-        $project = $CI->db->select('color')
-            ->from(db_prefix() . 'projects')
-            ->where('id', $project_id)
-            ->get()
-            ->row();
-        
-        if ($project && !empty($project->color)) {
-            return $project->color;
-        }
-        
-        // Generate consistent color from project ID
+        // Generate consistent color from project ID (tblprojects has no color column)
         $colors = [
             '#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6',
             '#1abc9c', '#e67e22', '#34495e', '#16a085', '#27ae60',
@@ -270,7 +257,7 @@ if (!function_exists('rb_is_overbooked')) {
         $CI = &get_instance();
         
         if (!class_exists('Rb_planning_model')) {
-            $CI->load->model('resourcebooking/Rb_planning_model', 'rb_planning_model');
+            $CI->load->model('bowresourceplanning/Rb_planning_model', 'rb_planning_model');
         }
         
         $capacity = $CI->rb_planning_model->get_capacity($staff_id, $start_date, $end_date);
@@ -292,7 +279,7 @@ if (!function_exists('rb_get_available_hours')) {
         $CI = &get_instance();
         
         if (!class_exists('Rb_planning_model')) {
-            $CI->load->model('resourcebooking/Rb_planning_model', 'rb_planning_model');
+            $CI->load->model('bowresourceplanning/Rb_planning_model', 'rb_planning_model');
         }
         
         $capacity = $CI->rb_planning_model->get_capacity($staff_id, $date, $date);
@@ -375,5 +362,47 @@ if (!function_exists('rb_format_date_range')) {
         }
         
         return date($year_format, $start) . ' - ' . date($year_format, $end);
+    }
+}
+
+if (!function_exists('rb_calc_daily_avg')) {
+    /**
+     * Calculate the average daily hours for a task/project based on estimated hours
+     * spread over the working days of the given period.
+     *
+     * @param float       $estimated_hours   Total estimated hours (e.g. 40)
+     * @param string|int  $date_from         Start date (Y-m-d or timestamp)
+     * @param string|int  $date_to           End date (Y-m-d or timestamp)
+     * @param bool        $include_weekends  Whether to count Sat/Sun as working days
+     * @return float|null  Daily average hours, or null if inputs are invalid
+     */
+    function rb_calc_daily_avg($estimated_hours, $date_from, $date_to, $include_weekends = false)
+    {
+        if (!$estimated_hours || !$date_from || !$date_to) {
+            return null;
+        }
+
+        $start = new DateTime(is_numeric($date_from) ? date('Y-m-d', $date_from) : $date_from);
+        $end   = new DateTime(is_numeric($date_to)   ? date('Y-m-d', $date_to)   : $date_to);
+
+        if ($start > $end) {
+            return null;
+        }
+
+        if ($include_weekends) {
+            $days = (int)$start->diff($end)->days + 1;
+        } else {
+            $days = 0;
+            $cur  = clone $start;
+            while ($cur <= $end) {
+                $dow = (int)$cur->format('N'); // 1=Mon … 7=Sun
+                if ($dow < 6) {
+                    $days++;
+                }
+                $cur->modify('+1 day');
+            }
+        }
+
+        return $days > 0 ? round((float)$estimated_hours / $days, 1) : null;
     }
 }
