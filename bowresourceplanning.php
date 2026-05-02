@@ -117,10 +117,5 @@ function bowresourceplanning_before_add_task($data)
  */
 function bowresourceplanning_before_update_task($data)
 {
-    $CI = &get_instance();
-    $estimated = $CI->input->post('estimated_hours');
-    if ($estimated !== null && $estimated !== '') {
-        $data['estimated_hours'] = max(0, (float)$estimated);
-    }
-    return $data;
+    return bowresourceplanning_before_add_task($data);
 }

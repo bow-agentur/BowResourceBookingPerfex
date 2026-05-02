@@ -177,3 +177,4 @@ $lang['kw']                         = 'KW';
 $lang['weekly_util']                = 'Wochenauslastung';
 $lang['day_tooltip_available']      = 'Verfügbar';
 $lang['day_tooltip_allocated']      = 'Geplant';
+$lang['error_loading_report']       = 'Fehler beim Laden des Berichts';

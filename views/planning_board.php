@@ -181,7 +181,7 @@
                                 data-live-search="true" data-width="100%">
                             <option value=""><?php echo _l('no_project'); ?></option>
                             <?php foreach($projects as $project): ?>
-                            <option value="<?php echo $project['id']; ?>" data-color="<?php echo $project['color'] ?? '#3498db'; ?>">
+                            <option value="<?php echo $project['id']; ?>" data-color="<?php echo rb_project_color($project['id']); ?>">
                                 <?php echo $project['name']; ?>
                             </option>
                             <?php endforeach; ?>

@@ -34,7 +34,6 @@ class Bowresourceplanning extends AdminController
       access_denied('bowresourceplanning');
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     // Default: aktuelle Woche
     $date_from = $this->input->get('date_from') ?: date('Y-m-d', strtotime('monday this week'));
@@ -78,7 +77,6 @@ class Bowresourceplanning extends AdminController
       access_denied('bowresourceplanning');
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     // Staff als Array laden
     $staff_objects = $this->staff_model->get('', ['active' => 1]);
@@ -87,6 +85,8 @@ class Bowresourceplanning extends AdminController
       foreach ($staff_objects as $s) {
         $staff[] = (array) $s;
       }
+    } elseif (is_object($staff_objects)) {
+      $staff[] = (array) $staff_objects;
     }
 
     // Time Off für aktuellen Monat
@@ -131,7 +131,6 @@ class Bowresourceplanning extends AdminController
         return;
       }
 
-      $this->load->model('bowresourceplanning/rb_planning_model');
 
       $date_from = $this->input->get('start_date') ?: $this->input->get('date_from') ?: date('Y-m-d', strtotime('monday this week'));
       $date_to   = $this->input->get('end_date') ?: $this->input->get('date_to') ?: date('Y-m-d', strtotime('sunday this week'));
@@ -163,7 +162,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     if ($this->input->method() === 'post') {
       if (!has_permission('bowresourceplanning', '', 'create')) {
@@ -231,7 +229,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     // DELETE
     if ($this->input->method() === 'delete' || $this->input->post('_method') === 'DELETE') {
@@ -314,7 +311,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     $data = [
       'date_from' => $this->input->post('date_from'),
@@ -339,7 +335,6 @@ class Bowresourceplanning extends AdminController
   public function api_time_off($id = '')
   {
     header('Content-Type: application/json');
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     // DELETE
     if ($id && ($this->input->method() === 'delete' || $this->input->post('_method') === 'DELETE')) {
@@ -429,7 +424,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
     $patterns = $this->rb_planning_model->get_work_patterns($staff_id ?: null);
     echo json_encode(['work_patterns' => $patterns]);
   }
@@ -447,7 +441,6 @@ class Bowresourceplanning extends AdminController
         return;
       }
 
-      $this->load->model('bowresourceplanning/rb_planning_model');
 
       $date_from = $this->input->get('start_date') ?: date('Y-m-01');
       $date_to   = $this->input->get('end_date') ?: date('Y-m-t');
@@ -526,7 +519,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     $staff_ids = $this->input->get('staff_ids');
     $date_from = $this->input->get('date_from') ?: date('Y-m-d', strtotime('monday this week'));
@@ -556,7 +548,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     $date_from = $this->input->get('date_from') ?: date('Y-m-d', strtotime('monday this week'));
     $date_to   = $this->input->get('date_to') ?: date('Y-m-d', strtotime('sunday this week'));
@@ -578,7 +569,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
     $projects = $this->rb_planning_model->get_active_projects();
     echo json_encode(['projects' => $projects]);
   }
@@ -601,7 +591,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     $staff_id   = (int)$this->input->post('staff_id');
     $project_id = (int)$this->input->post('project_id');
@@ -627,11 +616,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    // Automatically add the staff member as a project follower when a project is assigned
-    if ($project_id) {
-      $this->rb_planning_model->add_project_follower($staff_id, $project_id);
-    }
-
     echo json_encode(['success' => (bool)$ok]);
   }
 
@@ -649,7 +633,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     $staff_id   = (int)$this->input->post('staff_id');
     $project_id = (int)$this->input->post('project_id');
@@ -688,7 +671,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     $task_id         = (int)$this->input->post('task_id');
     $estimated_hours = $this->input->post('estimated_hours');
@@ -717,7 +699,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
 
     $data = [
       'staff_id'        => $this->input->post('staff_id'),
@@ -743,7 +724,6 @@ class Bowresourceplanning extends AdminController
     // so the task always reflects the planned effort from the board.
     if ($id && !empty($data['task_id']) && !empty($data['hours_per_day'])
         && !empty($data['date_from']) && !empty($data['date_to'])) {
-      $this->load->helper('bowresourceplanning/rb_capacity');
       $include_weekends = !empty($data['include_weekends']);
       if ($include_weekends) {
         $d1   = new DateTime($data['date_from']);
@@ -783,7 +763,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
     $project = $this->rb_planning_model->get_project_dates((int)$id);
 
     if (!$project) {
@@ -818,7 +797,6 @@ class Bowresourceplanning extends AdminController
       return;
     }
 
-    $this->load->model('bowresourceplanning/rb_planning_model');
     $tasks = $this->rb_planning_model->get_tasks_for_project($project_id, $staff_id);
     echo json_encode(['tasks' => $tasks]);
   }

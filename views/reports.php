@@ -53,9 +53,6 @@
                                     <button type="submit" class="btn btn-primary">
                                         <i class="fa fa-search"></i> <?php echo _l('filter'); ?>
                                     </button>
-                                    <button type="button" class="btn btn-default" id="rb-export-csv">
-                                        <i class="fa fa-download"></i> CSV
-                                    </button>
                                 </form>
                             </div>
                         </div>
@@ -355,11 +352,6 @@ $(function () {
     });
     loadReport();
 
-    // ── CSV Export ───────────────────────────────────────────────────────────
-    $('#rb-export-csv').on('click', function () {
-        var params = $('#rb-report-filters').serialize();
-        window.location.href = '<?php echo admin_url("bowresourceplanning/api_report_export"); ?>?' + params;
-    });
 
     // ════════════════════════════════════════════════════════════════════════
     // LOAD REPORT
@@ -377,8 +369,8 @@ $(function () {
 
         $.get('<?php echo admin_url("bowresourceplanning/api_report_data"); ?>', params, function (r) {
             if (r && r.success) { renderReport(r.data); }
-            else { alert_float('danger', (r && r.error) || 'Fehler beim Laden'); }
-        }).fail(function () { alert_float('danger', 'Fehler beim Laden'); });
+            else { alert_float('danger', (r && r.error) || '<?php echo _l("error_loading_report"); ?>');
+        }).fail(function () { alert_float('danger', '<?php echo _l("error_loading_report"); ?>'); });
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -442,7 +434,13 @@ $(function () {
         $('#rb-projects-tbody').html(ptbody || '<tr><td colspan="4" class="text-center text-muted"><?php echo _l("no_records_found"); ?></td></tr>');
 
         // Tasks table
-        var taskStatuses = { 1:'Nicht gestartet', 2:'In Bearbeitung', 3:'Fertig', 4:'Offen', 5:'Prüfung' };
+        var taskStatuses = {
+            1: '<?php echo _l("task_status_1"); ?>',
+            2: '<?php echo _l("task_status_2"); ?>',
+            3: '<?php echo _l("task_status_3"); ?>',
+            4: '<?php echo _l("task_status_4"); ?>',
+            5: '<?php echo _l("task_status_5"); ?>'
+        };
         var ttbody = '';
         var totalAlloc = 0, totalEst = 0;
         taskDetails.forEach(function (t) {
@@ -512,7 +510,7 @@ $(function () {
                     showInLegend: true } },
                 series: [{ name: '<?php echo _l("hours_use"); ?>', colorByPoint: true,
                     data: projectHours.map(function (p) {
-                        return { name: p.project_name || 'Intern', y: parseFloat(p.total_hours) || 0 };
+                        return { name: p.project_name || '<?php echo _l("no_project"); ?>', y: parseFloat(p.total_hours) || 0 };
                     })
                 }],
                 credits: { enabled: false }

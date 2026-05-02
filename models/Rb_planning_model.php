@@ -179,17 +179,6 @@ class Rb_planning_model extends App_Model
         return false;
     }
 
-    /**
-     * Move allocation (Drag & Drop)
-     */
-    public function move_allocation($id, $date_from, $date_to)
-    {
-        return $this->update_allocation($id, [
-            'date_from' => $date_from,
-            'date_to'   => $date_to
-        ]);
-    }
-
     // ========================================================================
     // WORK PATTERNS CRUD
     // ========================================================================
@@ -253,59 +242,6 @@ class Rb_planning_model extends App_Model
         return $this->db->get($this->table_work_patterns)->result_array();
     }
 
-    /**
-     * Add work pattern
-     */
-    public function add_work_pattern($data)
-    {
-        if (empty($data['staff_id']) || empty($data['valid_from'])) {
-            return false;
-        }
-
-        $data['valid_from'] = date('Y-m-d', strtotime($data['valid_from']));
-        if (!empty($data['valid_to'])) {
-            $data['valid_to'] = date('Y-m-d', strtotime($data['valid_to']));
-        }
-
-        $this->db->insert($this->table_work_patterns, $data);
-        return $this->db->insert_id();
-    }
-
-    /**
-     * Update work pattern
-     */
-    public function update_work_pattern($id, $data)
-    {
-        if (!empty($data['valid_from'])) {
-            $data['valid_from'] = date('Y-m-d', strtotime($data['valid_from']));
-        }
-        if (!empty($data['valid_to'])) {
-            $data['valid_to'] = date('Y-m-d', strtotime($data['valid_to']));
-        }
-
-        $this->db->where('id', $id);
-        $this->db->update($this->table_work_patterns, $data);
-
-        return $this->db->affected_rows() > 0;
-    }
-
-    /**
-     * Delete work pattern
-     */
-    public function delete_work_pattern($id)
-    {
-        // Nicht das System-Default löschen
-        $pattern = $this->db->where('id', $id)->get($this->table_work_patterns)->row();
-        if ($pattern && $pattern->is_default && $pattern->staff_id == 0) {
-            return false;
-        }
-
-        $this->db->where('id', $id);
-        $this->db->delete($this->table_work_patterns);
-
-        return $this->db->affected_rows() > 0;
-    }
-
     // ========================================================================
     // TIME OFF CRUD
     // ========================================================================
@@ -344,15 +280,6 @@ class Rb_planning_model extends App_Model
         $this->db->order_by('t.date_from', 'ASC');
 
         return $this->db->get()->result_array();
-    }
-
-    /**
-     * Get single time off entry
-     */
-    public function get_time_off_entry($id)
-    {
-        $this->db->where('id', $id);
-        return $this->db->get($this->table_time_off)->row();
     }
 
     /**
@@ -410,17 +337,6 @@ class Rb_planning_model extends App_Model
         $this->db->delete($this->table_time_off);
 
         return $this->db->affected_rows() > 0;
-    }
-
-    /**
-     * Approve time off
-     */
-    public function approve_time_off($id, $approved = 1)
-    {
-        return $this->update_time_off($id, [
-            'approved'    => $approved,
-            'approved_by' => get_staff_user_id()
-        ]);
     }
 
     // ========================================================================
@@ -495,7 +411,7 @@ class Rb_planning_model extends App_Model
                 } else {
                     // Keine Kapazität (z.B. Wochenende, Feiertag)
                     // Wenn trotzdem geplant: "scheduled" (nicht overbooked, da bewusst geplant)
-                    $percent = $allocated > 0 ? 0 : 0;
+                    $percent = 0;
                 }
 
                 // Status bestimmen
@@ -791,7 +707,6 @@ class Rb_planning_model extends App_Model
      */
     public function get_board_data($date_from, $date_to, $filters = [])
     {
-        $this->load->helper('bowresourceplanning/rb_capacity');
 
         // 1. Active staff
         $this->db->select('s.staffid, s.firstname, s.lastname, s.email, s.profile_image');
@@ -1290,13 +1205,10 @@ class Rb_planning_model extends App_Model
             $alloc_start = max(strtotime($alloc['date_from']), strtotime($date_from));
             $alloc_end = min(strtotime($alloc['date_to']), strtotime($date_to));
             
-            $working_days = 0;
-            for ($d = $alloc_start; $d <= $alloc_end; $d += 86400) {
-                $dayOfWeek = date('N', $d); // 1=Mon, 7=Sun
-                if ($dayOfWeek < 6) { // Mon-Fri
-                    $working_days++;
-                }
-            }
+            $working_days = rb_count_working_days(
+                date('Y-m-d', $alloc_start),
+                date('Y-m-d', $alloc_end)
+            );
             
             $hours = $working_days * floatval($alloc['hours_per_day']);
             $project_hours[$project_id]['total_hours'] += $hours;
@@ -1345,41 +1257,6 @@ class Rb_planning_model extends App_Model
         $this->db->group_by('t.type');
         
         return $this->db->get()->result_array();
-    }
-
-    /**
-     * Add a staff member as a project follower (project_activity watcher).
-     * Uses Perfex's tblproject_activity to register the follower if not already present.
-     *
-     * @param int $staff_id
-     * @param int $project_id
-     * @return bool
-     */
-    public function add_project_follower($staff_id, $project_id)
-    {
-        $staff_id   = (int)$staff_id;
-        $project_id = (int)$project_id;
-        if (!$staff_id || !$project_id) return false;
-
-        // Check if already a follower
-        $exists = $this->db->get_where(
-            db_prefix() . 'project_members',
-            ['project_id' => $project_id, 'staff_id' => $staff_id]
-        )->row();
-
-        if ($exists) return true; // already a member, skip
-
-        // Use Perfex's projects model if loaded; otherwise insert directly
-        if (function_exists('add_project_member')) {
-            return add_project_member($project_id, $staff_id);
-        }
-
-        $this->db->insert(db_prefix() . 'project_members', [
-            'project_id' => $project_id,
-            'staff_id'   => $staff_id
-        ]);
-
-        return $this->db->affected_rows() > 0;
     }
 
     /**
