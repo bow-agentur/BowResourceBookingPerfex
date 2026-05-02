@@ -257,7 +257,7 @@ if (!function_exists('rb_is_overbooked')) {
         $CI = &get_instance();
         
         if (!class_exists('Rb_planning_model')) {
-            $CI->load->model('resourcebooking/Rb_planning_model', 'rb_planning_model');
+            $CI->load->model('bowresourceplanning/Rb_planning_model', 'rb_planning_model');
         }
         
         $capacity = $CI->rb_planning_model->get_capacity($staff_id, $start_date, $end_date);
@@ -279,7 +279,7 @@ if (!function_exists('rb_get_available_hours')) {
         $CI = &get_instance();
         
         if (!class_exists('Rb_planning_model')) {
-            $CI->load->model('resourcebooking/Rb_planning_model', 'rb_planning_model');
+            $CI->load->model('bowresourceplanning/Rb_planning_model', 'rb_planning_model');
         }
         
         $capacity = $CI->rb_planning_model->get_capacity($staff_id, $date, $date);

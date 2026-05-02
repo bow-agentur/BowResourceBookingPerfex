@@ -12,27 +12,27 @@ Author: BOW E-Commerce Agentur GmbH
 Author URI: https://bow-agentur.de
 */
 
-define('RESOURCEBOOKING_MODULE', 'resourcebooking');
+define('RESOURCEBOOKING_MODULE', 'bowresourceplanning');
 
 define('RESOURCEBOOKING_MODULE_UPLOAD_FOLDER', module_dir_path(RESOURCEBOOKING_MODULE, 'uploads'));
-hooks()->add_action('admin_init', 'resourcebooking_permissions');
-hooks()->add_action('admin_init', 'resourcebooking_module_init_menu_items');
+hooks()->add_action('admin_init', 'bowresourceplanning_permissions');
+hooks()->add_action('admin_init', 'bowresourceplanning_module_init_menu_items');
 
 // Task hooks: persist estimated_hours when tasks are created/updated
-hooks()->add_filter('before_add_task', 'resourcebooking_before_add_task');
-hooks()->add_filter('before_update_task', 'resourcebooking_before_update_task');
+hooks()->add_filter('before_add_task', 'bowresourceplanning_before_add_task');
+hooks()->add_filter('before_update_task', 'bowresourceplanning_before_update_task');
 
 /**
 * Register activation module hook
 */
-register_activation_hook(RESOURCEBOOKING_MODULE, 'resourcebooking_module_activation_hook');
+register_activation_hook(RESOURCEBOOKING_MODULE, 'bowresourceplanning_module_activation_hook');
 /**
 * Load the module helper
 */
 $CI = & get_instance();
 $CI->load->helper(RESOURCEBOOKING_MODULE . '/rb_capacity');
 
-function resourcebooking_module_activation_hook()
+function bowresourceplanning_module_activation_hook()
 {
     $CI = &get_instance();
     require_once(__DIR__ . '/install.php');
@@ -47,13 +47,13 @@ register_language_files(RESOURCEBOOKING_MODULE, [RESOURCEBOOKING_MODULE]);
  * Init goals module menu items in setup in admin_init hook
  * @return null
  */
-function resourcebooking_module_init_menu_items()
+function bowresourceplanning_module_init_menu_items()
 {
     
     $CI = &get_instance();
-    if (has_permission('resourcebooking', '', 'view')) {
+    if (has_permission('bowresourceplanning', '', 'view')) {
         $CI->app_menu->add_sidebar_menu_item('resource-booking', [
-            'name'     => _l('resourcebooking'),
+            'name'     => _l('bowresourceplanning'),
             'icon'     => 'fa fa-calendar',
             'position' => 50,
         ]);
@@ -63,23 +63,25 @@ function resourcebooking_module_init_menu_items()
             'slug'     => 'planning-board',
             'name'     => _l('planning_board'),
             'icon'     => 'fa fa-th',
-            'href'     => admin_url('resourcebooking/planning_board'),
+            'href'     => admin_url('bowresourceplanning/planning_board'),
             'position' => 1,
         ]);
 
-        // NEU: Reports
-        $CI->app_menu->add_sidebar_children_item('resource-booking', [
-            'slug'     => 'rb-reports',
-            'name'     => _l('rb_reports'),
-            'icon'     => 'fa fa-bar-chart',
-            'href'     => admin_url('resourcebooking/reports'),
-            'position' => 2,
-        ]);
+        // Reports — only for managers/admins (not pure read-only employees)
+        if (is_admin() || has_permission('bowresourceplanning', '', 'create') || has_permission('bowresourceplanning', '', 'edit')) {
+            $CI->app_menu->add_sidebar_children_item('resource-booking', [
+                'slug'     => 'rb-reports',
+                'name'     => _l('rb_reports'),
+                'icon'     => 'fa fa-bar-chart',
+                'href'     => admin_url('bowresourceplanning/reports'),
+                'position' => 2,
+            ]);
+        }
     }
     
 }
 
-function resourcebooking_permissions()
+function bowresourceplanning_permissions()
 {
     $capabilities = [];
 
@@ -90,7 +92,7 @@ function resourcebooking_permissions()
             'delete' => _l('permission_delete'),
     ];
 
-    register_staff_capabilities('resourcebooking', $capabilities, _l('resourcebooking'));
+    register_staff_capabilities('bowresourceplanning', $capabilities, _l('bowresourceplanning'));
 }
 
 /**
@@ -98,7 +100,7 @@ function resourcebooking_permissions()
  *
  * @param array $data Task data passed by reference
  */
-function resourcebooking_before_add_task($data)
+function bowresourceplanning_before_add_task($data)
 {
     $CI = &get_instance();
     $estimated = $CI->input->post('estimated_hours');
@@ -113,7 +115,7 @@ function resourcebooking_before_add_task($data)
  *
  * @param array $data Task data passed by reference
  */
-function resourcebooking_before_update_task($data)
+function bowresourceplanning_before_update_task($data)
 {
     $CI = &get_instance();
     $estimated = $CI->input->post('estimated_hours');

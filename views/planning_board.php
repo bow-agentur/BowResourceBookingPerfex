@@ -43,7 +43,7 @@
                                     </button>
                                 </div>
 
-                                <?php if(has_permission('resourcebooking', '', 'create')): ?>
+                                <?php if(has_permission('bowresourceplanning', '', 'create')): ?>
                                 <button type="button" class="btn btn-success" id="rb-add-allocation">
                                     <i class="fa fa-plus"></i> <?php echo _l('new_allocation'); ?>
                                 </button>
@@ -393,12 +393,12 @@
 <?php init_tail(); ?>
 
 <!-- Planning Board Assets -->
-<link rel="stylesheet" href="<?php echo module_dir_url('resourcebooking', 'assets/css/planning-board.css'); ?>?v=<?php echo time(); ?>">
-<script src="<?php echo module_dir_url('resourcebooking', 'assets/js/modules/pb-utils.js'); ?>?v=<?php echo time(); ?>"></script>
-<script src="<?php echo module_dir_url('resourcebooking', 'assets/js/modules/pb-render.js'); ?>?v=<?php echo time(); ?>"></script>
-<script src="<?php echo module_dir_url('resourcebooking', 'assets/js/modules/pb-drag.js'); ?>?v=<?php echo time(); ?>"></script>
-<script src="<?php echo module_dir_url('resourcebooking', 'assets/js/modules/pb-modal.js'); ?>?v=<?php echo time(); ?>"></script>
-<script src="<?php echo module_dir_url('resourcebooking', 'assets/js/planning-board.js'); ?>?v=<?php echo time(); ?>"></script>
+<link rel="stylesheet" href="<?php echo module_dir_url('bowresourceplanning', 'assets/css/planning-board.css'); ?>?v=<?php echo time(); ?>">
+<script src="<?php echo module_dir_url('bowresourceplanning', 'assets/js/modules/pb-utils.js'); ?>?v=<?php echo time(); ?>"></script>
+<script src="<?php echo module_dir_url('bowresourceplanning', 'assets/js/modules/pb-render.js'); ?>?v=<?php echo time(); ?>"></script>
+<script src="<?php echo module_dir_url('bowresourceplanning', 'assets/js/modules/pb-drag.js'); ?>?v=<?php echo time(); ?>"></script>
+<script src="<?php echo module_dir_url('bowresourceplanning', 'assets/js/modules/pb-modal.js'); ?>?v=<?php echo time(); ?>"></script>
+<script src="<?php echo module_dir_url('bowresourceplanning', 'assets/js/planning-board.js'); ?>?v=<?php echo time(); ?>"></script>
 
 <script>
 // Initialize Planning Board with server data
@@ -406,11 +406,11 @@ $(function() {
     if (typeof PlanningBoard !== 'undefined') {
         PlanningBoard.init({
             baseUrl: '<?php echo site_url(); ?>',
-            apiUrl: '<?php echo admin_url("resourcebooking"); ?>',
+            apiUrl: '<?php echo admin_url("bowresourceplanning"); ?>',
             csrfToken: '<?php echo $this->security->get_csrf_hash(); ?>',
-            canEdit: <?php echo has_permission('resourcebooking', '', 'edit') ? 'true' : 'false'; ?>,
-            canDelete: <?php echo has_permission('resourcebooking', '', 'delete') ? 'true' : 'false'; ?>,
-            canCreate: <?php echo has_permission('resourcebooking', '', 'create') ? 'true' : 'false'; ?>,
+            canEdit: <?php echo has_permission('bowresourceplanning', '', 'edit') ? 'true' : 'false'; ?>,
+            canDelete: <?php echo has_permission('bowresourceplanning', '', 'delete') ? 'true' : 'false'; ?>,
+            canCreate: <?php echo has_permission('bowresourceplanning', '', 'create') ? 'true' : 'false'; ?>,
             isEmployee: <?php echo isset($is_employee) && $is_employee ? 'true' : 'false'; ?>,
             ownStaffId: <?php echo isset($own_staff_id) ? (int)$own_staff_id : 'null'; ?>,
             lang: {

@@ -29,11 +29,15 @@ $module_tables = [
     db_prefix() . 'resource_group',
 ];
 
+$CI->db->query('SET FOREIGN_KEY_CHECKS = 0');
+
 foreach ($module_tables as $table) {
     if ($CI->db->table_exists($table)) {
         $CI->db->query('DROP TABLE IF EXISTS `' . $table . '`');
     }
 }
+
+$CI->db->query('SET FOREIGN_KEY_CHECKS = 1');
 
 // ============================================================================
 // 2. Column added to tbltask_comments

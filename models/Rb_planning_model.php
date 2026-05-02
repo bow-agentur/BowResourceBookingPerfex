@@ -791,7 +791,7 @@ class Rb_planning_model extends App_Model
      */
     public function get_board_data($date_from, $date_to, $filters = [])
     {
-        $this->load->helper('resourcebooking/rb_capacity');
+        $this->load->helper('bowresourceplanning/rb_capacity');
 
         // 1. Active staff
         $this->db->select('s.staffid, s.firstname, s.lastname, s.email, s.profile_image');
@@ -1221,7 +1221,7 @@ class Rb_planning_model extends App_Model
                 'touserid'        => $staff_id,
                 'fromcompany'     => 1,
                 'fromuserid'      => get_staff_user_id(),
-                'link'            => 'resourcebooking/planning_board',
+                'link' => 'bowresourceplanning/planning_board',
                 'additional_data' => json_encode(['type' => 'overload']),
             ]);
 
@@ -1234,7 +1234,7 @@ class Rb_planning_model extends App_Model
                     'touserid'        => $admin['staffid'],
                     'fromcompany'     => 1,
                     'fromuserid'      => get_staff_user_id(),
-                    'link'            => 'resourcebooking/planning_board',
+                    'link' => 'bowresourceplanning/planning_board',
                     'additional_data' => json_encode(['type' => 'overload']),
                 ]);
             }

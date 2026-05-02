@@ -358,7 +358,7 @@ $(function () {
     // ── CSV Export ───────────────────────────────────────────────────────────
     $('#rb-export-csv').on('click', function () {
         var params = $('#rb-report-filters').serialize();
-        window.location.href = '<?php echo admin_url("resourcebooking/api_report_export"); ?>?' + params;
+        window.location.href = '<?php echo admin_url("bowresourceplanning/api_report_export"); ?>?' + params;
     });
 
     // ════════════════════════════════════════════════════════════════════════
@@ -375,7 +375,7 @@ $(function () {
         var spin = '<tr><td colspan="10" class="text-center"><i class="fa fa-spinner fa-spin"></i></td></tr>';
         $('#rb-report-tbody, #rb-projects-tbody, #rb-tasks-tbody').html(spin);
 
-        $.get('<?php echo admin_url("resourcebooking/api_report_data"); ?>', params, function (r) {
+        $.get('<?php echo admin_url("bowresourceplanning/api_report_data"); ?>', params, function (r) {
             if (r && r.success) { renderReport(r.data); }
             else { alert_float('danger', (r && r.error) || 'Fehler beim Laden'); }
         }).fail(function () { alert_float('danger', 'Fehler beim Laden'); });
