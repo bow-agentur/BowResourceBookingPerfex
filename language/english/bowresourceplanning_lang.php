@@ -1,6 +1,6 @@
 <?php
 
-$lang['bowresourceplanning'] = 'Resource Planning';
+$lang['bowresourceplanning'] = 'BOW Resource Planning';
 
 // ============================================================
 // Planning Board (Float-like Resource Planning) - NEW

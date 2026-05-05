@@ -15,6 +15,8 @@ defined('BASEPATH') or exit('No direct script access allowed');
  * Only the COLUMN and ROW additions made by install.php are reversed.
  */
 
+$CI = &get_instance();
+
 // ============================================================================
 // 1. Module-specific tables (drop in FK-safe order)
 // ============================================================================

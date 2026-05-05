@@ -463,10 +463,15 @@ class Rb_planning_model extends App_Model
     {
         $hr_table = db_prefix() . 'hr_absences';
         if ($this->db->table_exists($hr_table)) {
-            // HR module available
-            $rows = $this->db->select('a.staff_id, a.date_from, a.date_to, a.is_half_day')
-                ->from($hr_table . ' a')
-                ->where('a.status', 'approved')
+            // HR module available — only absences that actually block capacity
+            $at_table = db_prefix() . 'hr_absence_types';
+            $query = $this->db->select('a.staff_id, a.date_from, a.date_to, a.is_half_day')
+                ->from($hr_table . ' a');
+            if ($this->db->table_exists($at_table) && $this->db->field_exists('blocks_capacity', $at_table)) {
+                $query = $this->db->join($at_table . ' at', 'at.id = a.absence_type_id', 'left')
+                    ->where('(at.blocks_capacity = 1 OR at.id IS NULL)');
+            }
+            $rows = $this->db->where('a.status', 'approved')
                 ->where('a.date_from <=', $date_to)
                 ->where('a.date_to >=', $date_from)
                 ->where_in('a.staff_id', $staff_ids)
@@ -872,11 +877,16 @@ class Rb_planning_model extends App_Model
         $hr_absences_table = db_prefix() . 'hr_absences';
 
         if ($this->db->table_exists($hr_absences_table)) {
-            // Read from bowhumanressources HR module
-            $rows = $this->db->select('a.staff_id, a.date_from, a.date_to, a.date_from AS start_date, a.date_to AS end_date, "hr" AS source, s.firstname, s.lastname')
+            // Read from bowhumanressources HR module — only capacity-blocking absence types
+            $at_table = db_prefix() . 'hr_absence_types';
+            $query = $this->db->select('a.staff_id, a.date_from, a.date_to, a.date_from AS start_date, a.date_to AS end_date, "hr" AS source, s.firstname, s.lastname')
                 ->from($hr_absences_table . ' a')
-                ->join(db_prefix() . 'staff s', 's.staffid = a.staff_id', 'left')
-                ->where('a.status', 'approved')
+                ->join(db_prefix() . 'staff s', 's.staffid = a.staff_id', 'left');
+            if ($this->db->table_exists($at_table) && $this->db->field_exists('blocks_capacity', $at_table)) {
+                $this->db->join($at_table . ' at', 'at.id = a.absence_type_id', 'left')
+                    ->where('(at.blocks_capacity = 1 OR at.id IS NULL)');
+            }
+            $rows = $this->db->where('a.status', 'approved')
                 ->where('a.date_from <=', $date_to)
                 ->where('a.date_to >=', $date_from)
                 ->where_in('a.staff_id', $staff_ids)

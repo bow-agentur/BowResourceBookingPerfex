@@ -242,9 +242,10 @@ var PB_Render = (function () {
         var allDates = PB_Utils.getDateRange(_st.startDate, _st.endDate, true);
         var weekGroups = _groupByWeek(allDates);
         // Only show chips when ≤ 8 weeks in view (avoids clutter)
+        var chipHtml = '';
         if (weekGroups.length <= 8) {
             var cap = _st.capacity[String(staffId)];
-            var chipHtml = '<div class="rb-weekly-chips">';
+            chipHtml = '<div class="rb-weekly-chips">';
             weekGroups.forEach(function (wg) {
                 var wdDates = wg.dates.filter(function (d) {
                     var dt = new Date(d + 'T00:00:00');
@@ -273,7 +274,6 @@ var PB_Render = (function () {
                     + 'KW\u00a0' + wg.kw + '\u00a0' + wPct + '%</span>';
             });
             chipHtml += '</div>';
-            html += chipHtml;
         }
 
         if (ownGoalsHtml) html += ownGoalsHtml;
@@ -293,7 +293,7 @@ var PB_Render = (function () {
         }
 
         // Single capacity lane: project backgrounds + proportional task bars
-        html += _buildCapacityLane(staffId, projAllocs, taskAllocs);
+        html += _buildCapacityLane(staffId, projAllocs, taskAllocs, chipHtml);
 
         html += '</div>'; // .rb-lanes-wrapper
         html += '</div>'; // .rb-staff-group
@@ -318,10 +318,11 @@ var PB_Render = (function () {
      * Height = CAPACITY_H (64 px = 8 h). Bars are bottom-aligned so empty space
      * at the top visualises spare capacity for that day.
      */
-    function _buildCapacityLane(staffId, projAllocs, taskAllocs) {
+    function _buildCapacityLane(staffId, projAllocs, taskAllocs, chipHtml) {
         var h = '<div class="rb-lane rb-capacity-lane">';
         h += '<div class="rb-lane-stub rb-capacity-stub">';
         h += '<span class="rb-capacity-scale">8h</span>';
+        if (chipHtml) h += chipHtml;
         h += '</div>';
         h += '<div class="rb-lane-cells rb-capacity-cells">';
         h += _renderDayCells(staffId, false);

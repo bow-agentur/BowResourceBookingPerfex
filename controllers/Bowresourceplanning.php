@@ -11,6 +11,7 @@ class Bowresourceplanning extends AdminController
   public function __construct()
   {
     parent::__construct();
+    $this->load->model('bowresourceplanning/rb_planning_model');
   }
 
   /**
